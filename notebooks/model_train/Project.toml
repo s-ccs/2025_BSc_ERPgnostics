@@ -1,0 +1,8 @@
+[deps]
+CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+cuDNN = "02a925ec-e4fe-4b08-9a7e-0d78e3d38ccd"
+Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
+JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
+MLUtils = "f1d291b0-491e-4a28-83b9-f70985020b54"
+StatisticalMeasures = "a19d573c-0a75-4610-95b3-7071388c7541"
