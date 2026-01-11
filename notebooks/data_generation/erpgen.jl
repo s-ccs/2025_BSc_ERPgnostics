@@ -32,6 +32,7 @@ end
 const DIAG = Diagnostics(false, Dict{Symbol, Int}(), Dict{Symbol, Float64}(), time())
 const DIAG_LOCK = ReentrantLock()
 
+# Enable or disable diagnostics and optionally propagate to workers.
 function enable_diagnostics!(flag::Bool = true; propagate::Bool = true)
     DIAG.enabled = flag
     if flag
@@ -48,6 +49,7 @@ function enable_diagnostics!(flag::Bool = true; propagate::Bool = true)
     return DIAG.enabled
 end
 
+# Reset in-memory diagnostics counters and timer.
 function reset_diagnostics!()
     lock(DIAG_LOCK)
     try
@@ -60,6 +62,7 @@ function reset_diagnostics!()
     return nothing
 end
 
+# Update diagnostics counters with a timing delta.
 @inline function _diag_update!(name::Symbol, dt::Float64)
     lock(DIAG_LOCK)
     try
@@ -71,6 +74,7 @@ end
     return nothing
 end
 
+# Time a function call while collecting diagnostics.
 @inline function diag_call(name::Symbol, f::Function)
     if !DIAG.enabled
         return f()
@@ -84,10 +88,12 @@ end
     end
 end
 
+# Convenience overload for diag_call with swapped args.
 @inline function diag_call(f::Function, name::Symbol)
     return diag_call(name, f)
 end
 
+# Snapshot diagnostics counters and timers.
 function diagnostics_snapshot()
     lock(DIAG_LOCK)
     try
@@ -101,6 +107,7 @@ function diagnostics_snapshot()
     end
 end
 
+# Merge diagnostics counters from a snapshot.
 function _merge_diag!(counts, times, snap)
     for (k, v) in snap.counts
         counts[k] = get(counts, k, 0) + v
@@ -111,6 +118,7 @@ function _merge_diag!(counts, times, snap)
     return nothing
 end
 
+# Print diagnostics for a single snapshot.
 function _print_diag(prefix::AbstractString, snap)
     println(prefix, " elapsed=", round(snap.elapsed; digits = 1), "s")
     for k in sort(collect(keys(snap.counts)))
@@ -121,6 +129,7 @@ function _print_diag(prefix::AbstractString, snap)
     return nothing
 end
 
+# Print diagnostics totals, optionally per worker.
 function print_diagnostics(; by_worker::Bool = true)
     if !DIAG.enabled
         println("Diagnostics disabled. Call enable_diagnostics!(true) first.")
@@ -151,6 +160,7 @@ function print_diagnostics(; by_worker::Bool = true)
     return nothing
 end
 
+# Periodically print diagnostics in a loop.
 function monitor_workers(; interval::Real = 10, cycles::Int = 0, by_worker::Bool = true)
     i = 0
     while cycles <= 0 || i < cycles
@@ -161,45 +171,54 @@ function monitor_workers(; interval::Real = 10, cycles::Int = 0, by_worker::Bool
     return nothing
 end
 
+# Start a timer that prints diagnostics.
 function start_monitor(; interval::Real = 10, by_worker::Bool = true)
     return Timer(_ -> print_diagnostics(by_worker = by_worker), interval; interval = interval)
 end
 
+# Stop a diagnostics timer.
 function stop_monitor!(timer::Timer)
     close(timer)
     return nothing
 end
 
+# Time-varying component wrapper for UnfoldSim.
 struct TimeVaryingComponent <: AbstractComponent
     basisfunction::Any
     maxlength::Any
     beta::Any
 end
 
+# Use maxlength as component length.
 Base.length(c::TimeVaryingComponent) = c.maxlength
 
+# Simulate a time-varying component with explicit RNG.
 function UnfoldSim.simulate_component(rng, c::TimeVaryingComponent, design::AbstractDesign)
     evts = generate_events(deepcopy(rng), design)
     data = c.beta .* c.basisfunction(evts, c.maxlength)
     return truncate_basisfunction(data, c.maxlength)
 end
 
+# Simulate a time-varying component with default RNG.
 function UnfoldSim.simulate_component(c::TimeVaryingComponent, design::AbstractDesign; rng = MersenneTwister(time_ns()))
     return UnfoldSim.simulate_component(rng, c, design)
 end
 
+# Generate a linear ERP basis (tilted bar).
 function basis_linear(evts, maxlength)
     shifts = -round.(Int, evts.duration_linear)
     basis = pad_array.(Ref(UnfoldSim.DSP.hanning(50)), shifts, 0)
     return basis
 end
 
+# Generate a lognormal ERP basis (one-sided fan).
 function basis_lognormal(evts, maxlength)
     basis = pdf.(LogNormal.(evts.duration ./ 40 .- 0.2, 1), Ref(range(0, 10, length = maxlength)))
     basis = basis ./ maximum.(basis)
     return basis
 end
 
+# Generate a hanning ERP basis (two-sided fan).
 function basis_hanning(evts, maxlength)
     fn = "duration"
     if "durationB" in names(evts)
@@ -213,6 +232,7 @@ function basis_hanning(evts, maxlength)
     return basis
 end
 
+# Ensure all basis functions share the same length.
 function truncate_basisfunction(basis, maxlength)
     difftomax = maxlength .- length.(basis)
     if any(difftomax .< 0)
@@ -225,6 +245,7 @@ function truncate_basisfunction(basis, maxlength)
     return reduce(hcat, basis)
 end
 
+# Clone noise settings while overriding noiselevel when supported.
 function _with_noiselevel(noise, noiselevel::Int)
     if hasproperty(noise, :noiselevel)
         fields = fieldnames(typeof(noise))
@@ -234,16 +255,17 @@ function _with_noiselevel(noise, noiselevel::Int)
     return noise
 end
 
-function simulate_6patterns(mu = 3.2, sigma = 0.5; maxlength::Int = 100, n_levels::Int = 8,
+# Simulate six ERP patterns and return raw time x trials data.
+function simulate_6patterns(mu = 3.2, sigma = 0.5; maxlength::Int = 100, condition_levels::Int = 8,
         noise = PinkNoise(), noiselevel_dist = Geometric(0.25), rng = MersenneTwister(time_ns()))
 
     design = SingleSubjectDesign(; 
         conditions = Dict(
             :condition => ["car", "face"],
-            :continuous => range(-2, 2, length = n_levels),
-            :duration => range(20, 100, length = n_levels),
-            :durationB => range(10, 30, length = n_levels),
-            :duration_linear => range(5, 40, length = n_levels),
+            :continuous => range(-2, 2, length = condition_levels),
+            :duration => range(20, 100, length = condition_levels),
+            :durationB => range(10, 30, length = condition_levels),
+            :duration_linear => range(5, 40, length = condition_levels),
         ),
         event_order_function = (r, x) -> shuffle(r, x),
     )
@@ -283,7 +305,7 @@ function simulate_6patterns(mu = 3.2, sigma = 0.5; maxlength::Int = 100, n_level
     end
 
     sim_evts[!, DELTA_LATENCY] = vcat(diff(sim_evts.latency), 0)
-    sim_6patterns = data .- mean(data, dims = 2)
+    sim_6patterns = data
     return sim_6patterns, sim_evts, noiselevel
 end
 
@@ -302,8 +324,14 @@ const SORTERS = Dict(
 const DEFAULT_NOISE_POOL = [PinkNoise(), WhiteNoise(), RedNoise(), ExponentialNoise()]
 const FILTER_BORDER = "reflect"
 
+# Apply per-timepoint z-score across trials (time x trials input).
+function zscore_timepoints(data_time_trials::AbstractMatrix)
+    return Float32.(Normalization.normalize(Float64.(data_time_trials), ZScore; dims = 2))
+end
+
+# Build an ERP image (trials x time) with sorting, optional blur, and per-timepoint z-score.
 function erpimage_sorted(data_all::AbstractMatrix, sortvalues;
-        zscore_trials::Bool = true,
+        zscore_timepoints::Bool = true,
         gauss_sigma::Real = 0.0,
         gauss_smooth::Bool = true,
         gauss_kernel_len::Int = 20,
@@ -321,11 +349,11 @@ function erpimage_sorted(data_all::AbstractMatrix, sortvalues;
         data_sorted = imfilter(data_sorted, kernel, FILTER_BORDER)
     end
 
-    img = Float32.(permutedims(data_sorted, (2, 1)))
-
-    if zscore_trials
-        img = Float32.(Normalization.normalize(img, ZScore; dims = 2))
+    if zscore_timepoints
+        data_sorted = ERPGen.zscore_timepoints(data_sorted)
     end
+
+    img = Float32.(permutedims(data_sorted, (2, 1)))
 
     if gauss_smooth && gauss_sigma > 0
         kernel_len = isodd(gauss_kernel_len) ? gauss_kernel_len : gauss_kernel_len + 1
@@ -336,6 +364,7 @@ function erpimage_sorted(data_all::AbstractMatrix, sortvalues;
     return img
 end
 
+# Resize an ERP image to the model input size.
 function resize_img(img::AbstractMatrix, target_h::Int, target_w::Int;
         resize_antialias::Bool = true,
         antialias_factor::Real = 0.75)
@@ -354,6 +383,7 @@ function resize_img(img::AbstractMatrix, target_h::Int, target_w::Int;
     return Float32.(imresize(out, (target_h, target_w)))
 end
 
+# Validate thread availability when threaded execution is requested.
 function ensure_threading!(threaded::Bool)
     threaded || return
     n = Threads.nthreads()
@@ -364,6 +394,7 @@ function ensure_threading!(threaded::Bool)
     return
 end
 
+# Periodically log progress for threaded execution.
 function start_progress_logger!(reps_done::Threads.Atomic{Int}, n_per_pattern::Int, progress_every::Int)
     progress_every <= 0 && return nothing
     return @async begin
@@ -384,6 +415,7 @@ function start_progress_logger!(reps_done::Threads.Atomic{Int}, n_per_pattern::I
     end
 end
 
+# Periodically log progress for process-based execution.
 function start_progress_logger_processes!(progress_chan, n_per_pattern::Int, progress_every::Int)
     progress_every <= 0 && return nothing
     return @async begin
@@ -403,17 +435,21 @@ function start_progress_logger_processes!(progress_chan, n_per_pattern::Int, pro
     end
 end
 
+# Apply Gaussian blur to an ERP image.
 function apply_gauss!(img::Matrix{Float32}, kernel2d)
     return Float32.(imfilter(img, kernel2d, FILTER_BORDER))
 end
 
+# Cache for antialias kernels to reduce recomputation.
 mutable struct AntialiasCache
     size::Tuple{Int, Int}
     kernel::Any
 end
 
+# Construct an empty antialias cache.
 AntialiasCache() = AntialiasCache((0, 0), nothing)
 
+# Apply optional Gaussian smoothing and antialias prefilter.
 function apply_filters!(img::Matrix{Float32}, gauss_cfg, resize_opts, cache::AntialiasCache)
     out = img
 
@@ -438,6 +474,7 @@ function apply_filters!(img::Matrix{Float32}, gauss_cfg, resize_opts, cache::Ant
     return out
 end
 
+# Build Gaussian and antialias settings from user inputs.
 function make_gauss_resize_cfg(gauss_sigma::Real, gauss_smooth::Bool, gauss_kernel_len::Int,
         resize_antialias::Bool, antialias_factor::Real,
         target_height::Int, target_width::Int)
@@ -455,21 +492,24 @@ function make_gauss_resize_cfg(gauss_sigma::Real, gauss_smooth::Bool, gauss_kern
     return gauss_cfg, resize_opts
 end
 
-function sample_sim_params(rng, mu_dist, sigma_dist, maxlength_dist, maxlength_min::Int, n_levels_dist, noise_pool)
+# Sample simulation parameters from configured distributions/ranges.
+function sample_sim_params(rng, mu_dist, sigma_dist, maxlength_dist, maxlength_min::Int,
+        condition_levels_range, noise_pool)
     mu = max(1, rand(rng, mu_dist))
     sigma = max(0.01, rand(rng, sigma_dist))
     maxlength = max(maxlength_min, Int(round(rand(rng, maxlength_dist))))
-    n_levels = max(4, Int(round(rand(rng, n_levels_dist))))
+    condition_levels = rand(rng, condition_levels_range)
     noise = rand(rng, noise_pool)
-    return mu, sigma, maxlength, n_levels, noise
+    return mu, sigma, maxlength, condition_levels, noise
 end
 
-function simulate_patterns(rng, mu, sigma; maxlength::Int, n_levels::Int, noise, noiselevel_dist)
+# Run a single ERP simulation with logging/diagnostics.
+function simulate_patterns(rng, mu, sigma; maxlength::Int, condition_levels::Int, noise, noiselevel_dist)
     return diag_call(:simulate_6patterns) do
         with_logger(NullLogger()) do
             simulate_6patterns(mu, sigma;
                 maxlength = maxlength,
-                n_levels = n_levels,
+                condition_levels = condition_levels,
                 noise = noise,
                 noiselevel_dist = noiselevel_dist,
                 rng = rng,
@@ -478,15 +518,17 @@ function simulate_patterns(rng, mu, sigma; maxlength::Int, n_levels::Int, noise,
     end
 end
 
-function render_patterns!(images, labels, metadata, base::Int, data, evts, mu, sigma, maxlength, n_levels, noise, noiselevel;
-        zscore_trials::Bool, gauss_cfg, resize_opts, gauss_kernel_len::Int, trial_blur::Real,
+# Render sorted ERP images for each pattern and store results.
+function render_patterns!(images, labels, metadata, base::Int, data, evts, mu, sigma, maxlength,
+        condition_levels, noise, noiselevel;
+        zscore_timepoints::Bool, gauss_cfg, resize_opts, gauss_kernel_len::Int, trial_blur::Real,
         target_height::Int, target_width::Int, antialias_factor::Real, cache::AntialiasCache)
 
     for (pidx, pname) in enumerate(PATTERN_NAMES)
         sortvalues = SORTERS[pname](evts)
         img = diag_call(:erpimage_sorted) do
             erpimage_sorted(data, sortvalues;
-                zscore_trials = zscore_trials,
+                zscore_timepoints = zscore_timepoints,
                 gauss_sigma = 0.0,
                 gauss_smooth = false,
                 gauss_kernel_len = gauss_kernel_len,
@@ -512,7 +554,7 @@ function render_patterns!(images, labels, metadata, base::Int, data, evts, mu, s
             mu = mu,
             sigma = sigma,
             maxlength = maxlength,
-            n_levels = n_levels,
+            condition_levels = condition_levels,
             noise = string(typeof(noise)),
             noiselevel = noiselevel,
         )
@@ -520,6 +562,7 @@ function render_patterns!(images, labels, metadata, base::Int, data, evts, mu, s
     return nothing
 end
 
+# Ensure requested distributed workers are available and load module code.
 function setup_workers!(n_workers::Int)
     n_workers <= 0 && return
     needed = n_workers - nworkers()
@@ -541,9 +584,10 @@ function setup_workers!(n_workers::Int)
     return
 end
 
+# Build a chunk of ERP data for process-based workers.
 function build_chunk_data(rep_start::Int, rep_end::Int, seed::UInt,
-        n_classes::Int, mu_dist, sigma_dist, maxlength_dist, maxlength_min::Int, n_levels_dist,
-        noise_pool, noiselevel_dist, zscore_trials::Bool, gauss_cfg, resize_opts,
+        n_classes::Int, mu_dist, sigma_dist, maxlength_dist, maxlength_min::Int, condition_levels_range,
+        noise_pool, noiselevel_dist, zscore_timepoints::Bool, gauss_cfg, resize_opts,
         target_height::Int, target_width::Int, antialias_factor::Real,
         gauss_kernel_len::Int, trial_blur::Real, blas_threads::Int, progress_chan, progress_every::Int)
 
@@ -563,11 +607,11 @@ function build_chunk_data(rep_start::Int, rep_end::Int, seed::UInt,
     local_done = 0
 
     for offset in 1:n_reps
-        mu, sigma, maxlength, n_levels, noise = sample_sim_params(
-            local_rng, mu_dist, sigma_dist, maxlength_dist, maxlength_min, n_levels_dist, noise_pool)
+        mu, sigma, maxlength, condition_levels, noise = sample_sim_params(
+            local_rng, mu_dist, sigma_dist, maxlength_dist, maxlength_min, condition_levels_range, noise_pool)
         data, evts, noiselevel = simulate_patterns(local_rng, mu, sigma;
             maxlength = maxlength,
-            n_levels = n_levels,
+            condition_levels = condition_levels,
             noise = noise,
             noiselevel_dist = noiselevel_dist,
         )
@@ -576,8 +620,8 @@ function build_chunk_data(rep_start::Int, rep_end::Int, seed::UInt,
 
         render_patterns!(
             local_imgs, local_labels, local_meta, base,
-            data, evts, mu, sigma, maxlength, n_levels, noise, noiselevel;
-            zscore_trials = zscore_trials,
+            data, evts, mu, sigma, maxlength, condition_levels, noise, noiselevel;
+            zscore_timepoints = zscore_timepoints,
             gauss_cfg = gauss_cfg,
             resize_opts = resize_opts,
             gauss_kernel_len = gauss_kernel_len,
@@ -604,6 +648,7 @@ function build_chunk_data(rep_start::Int, rep_end::Int, seed::UInt,
     return (rep_start, rep_end, local_imgs, local_labels, local_meta)
 end
 
+# Generate ERP images using threads (single process).
 function generate_erp_images_threads(; n_per_pattern::Int = 10,
         mu_mean::Real = 3.2,
         mu_sd::Real = 0.3,
@@ -612,11 +657,11 @@ function generate_erp_images_threads(; n_per_pattern::Int = 10,
         maxlength_mean::Real = 100,
         maxlength_sd::Real = 10,
         maxlength_min::Int = 100,
-        n_levels_mean::Real = 8,
-        n_levels_sd::Real = 2,
+        condition_levels_min::Int = 3,
+        condition_levels_max::Int = 10,
         target_height::Int = 64,
         target_width::Int = 64,
-        zscore_trials::Bool = true,
+        zscore_timepoints::Bool = true,
         gauss_sigma::Real = 1.0,
         gauss_smooth::Bool = true,
         gauss_kernel_len::Int = 20,
@@ -640,7 +685,7 @@ function generate_erp_images_threads(; n_per_pattern::Int = 10,
     mu_dist = Normal(mu_mean, mu_sd)
     sigma_dist = Normal(sigma_mean, sigma_sd)
     maxlength_dist = Normal(maxlength_mean, maxlength_sd)
-    n_levels_dist = Normal(n_levels_mean, n_levels_sd)
+    condition_levels_range = condition_levels_min:condition_levels_max
 
     ensure_threading!(threaded)
     if threaded && blas_threads > 0
@@ -661,6 +706,7 @@ function generate_erp_images_threads(; n_per_pattern::Int = 10,
 
     chunk = cld(n_per_pattern, nthreads)
 
+    # Build a chunk of images on a single thread.
     function build_chunk!(chunk_id::Int)
         rep_start = (chunk_id - 1) * chunk + 1
         rep_end = min(n_per_pattern, chunk_id * chunk)
@@ -671,11 +717,11 @@ function generate_erp_images_threads(; n_per_pattern::Int = 10,
         local_done = 0
 
         for rep in rep_start:rep_end
-            mu, sigma, maxlength, n_levels, noise = sample_sim_params(
-                local_rng, mu_dist, sigma_dist, maxlength_dist, maxlength_min, n_levels_dist, noise_pool)
+            mu, sigma, maxlength, condition_levels, noise = sample_sim_params(
+                local_rng, mu_dist, sigma_dist, maxlength_dist, maxlength_min, condition_levels_range, noise_pool)
             data, evts, noiselevel = simulate_patterns(local_rng, mu, sigma;
                 maxlength = maxlength,
-                n_levels = n_levels,
+                condition_levels = condition_levels,
                 noise = noise,
                 noiselevel_dist = noiselevel_dist,
             )
@@ -684,8 +730,8 @@ function generate_erp_images_threads(; n_per_pattern::Int = 10,
 
             render_patterns!(
                 images, labels, metadata, base,
-                data, evts, mu, sigma, maxlength, n_levels, noise, noiselevel;
-                zscore_trials = zscore_trials,
+                data, evts, mu, sigma, maxlength, condition_levels, noise, noiselevel;
+                zscore_timepoints = zscore_timepoints,
                 gauss_cfg = gauss_cfg,
                 resize_opts = resize_opts,
                 gauss_kernel_len = gauss_kernel_len,
@@ -723,6 +769,7 @@ function generate_erp_images_threads(; n_per_pattern::Int = 10,
     return images, labels, metadata
 end
 
+# Generate ERP images using distributed worker processes.
 function generate_erp_images_processes(; n_per_pattern::Int = 10,
         mu_mean::Real = 3.2,
         mu_sd::Real = 0.3,
@@ -731,11 +778,11 @@ function generate_erp_images_processes(; n_per_pattern::Int = 10,
         maxlength_mean::Real = 100,
         maxlength_sd::Real = 10,
         maxlength_min::Int = 100,
-        n_levels_mean::Real = 8,
-        n_levels_sd::Real = 2,
+        condition_levels_min::Int = 3,
+        condition_levels_max::Int = 10,
         target_height::Int = 64,
         target_width::Int = 64,
-        zscore_trials::Bool = true,
+        zscore_timepoints::Bool = true,
         gauss_sigma::Real = 1.0,
         gauss_smooth::Bool = true,
         gauss_kernel_len::Int = 20,
@@ -755,7 +802,7 @@ function generate_erp_images_processes(; n_per_pattern::Int = 10,
     mu_dist = Normal(mu_mean, mu_sd)
     sigma_dist = Normal(sigma_mean, sigma_sd)
     maxlength_dist = Normal(maxlength_mean, maxlength_sd)
-    n_levels_dist = Normal(n_levels_mean, n_levels_sd)
+    condition_levels_range = condition_levels_min:condition_levels_max
 
     gauss_cfg, resize_opts = make_gauss_resize_cfg(
         gauss_sigma, gauss_smooth, gauss_kernel_len,
@@ -784,8 +831,8 @@ function generate_erp_images_processes(; n_per_pattern::Int = 10,
         end
         futures[i] = @spawnat w ERPGen.build_chunk_data(
             rep_start, rep_end, seeds[i],
-            n_classes, mu_dist, sigma_dist, maxlength_dist, maxlength_min, n_levels_dist,
-            noise_pool, noiselevel_dist, zscore_trials, gauss_cfg, resize_opts,
+            n_classes, mu_dist, sigma_dist, maxlength_dist, maxlength_min, condition_levels_range,
+            noise_pool, noiselevel_dist, zscore_timepoints, gauss_cfg, resize_opts,
             target_height, target_width, antialias_factor, gauss_kernel_len, trial_blur,
             blas_threads, progress_chan, progress_every,
         )
@@ -811,6 +858,7 @@ function generate_erp_images_processes(; n_per_pattern::Int = 10,
     return images, labels, metadata
 end
 
+# Unified ERP image generation entry point.
 function generate_erp_images(; parallel_mode::Symbol = :threads, n_workers::Int = 16,
         threaded::Bool = false, kwargs...)
 
@@ -821,6 +869,7 @@ function generate_erp_images(; parallel_mode::Symbol = :threads, n_workers::Int 
     return generate_erp_images_threads(; threaded = threaded, kwargs...)
 end
 
+# Save generated ERP dataset and settings to JLD2.
 function save_erp_dataset(images, labels, metadata;
         dataset_dir::AbstractString = joinpath(pwd(), "datasets"),
         prefix::AbstractString = "erp_dataset",
