@@ -78,7 +78,8 @@ function generate_erp_images(; n_per_pattern::Int = 10,
         target_width = target_width,
     )
 
-    n_classes = length(patterns) * VARIANT_COUNT
+    patterns_with_no_class = :no_class in patterns ? patterns : vcat(patterns, [:no_class])
+    n_classes = length(patterns_with_no_class) * VARIANT_COUNT
     total = n_classes * n_per_pattern
 
     images = Vector{Matrix{Float32}}(undef, total)
@@ -137,7 +138,7 @@ function generate_erp_images(; n_per_pattern::Int = 10,
             render_pattern_images!(
                 images, labels, metadata, base,
                 cropped, sim_result, mu, sigma, epoch_duration_s, sampling_rate,
-                noise, processing, crop_info, generated_size, patterns;
+                noise, processing, crop_info, generated_size, patterns_with_no_class;
                 rng = local_rng,
             )
 

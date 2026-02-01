@@ -1,0 +1,9 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "python.venvPath": "${workspaceFolder}",
+  "jupyter.jupyterServerType": "local",
+  "jupyter.kernelspecPaths": [
+    "${workspaceFolder}/.venv/share/jupyter/kernels",
+    "${env:HOME}/.local/share/jupyter/kernels"
+  ]
+}
