@@ -1,170 +1,359 @@
 # Periodically log progress for threaded execution.
 function start_generation_logger!(reps_done::Threads.Atomic{Int}, n_per_pattern::Int, n_classes::Int, progress_every::Int)
-    progress_every <= 0 && return nothing
-    return @async begin
-        last = 0
-        while true
-            done = reps_done[]
-            if done >= n_per_pattern
-                println("Progress: ", n_per_pattern, "/", n_per_pattern,
-                    " reps (per class=", n_per_pattern, ", total images=", n_per_pattern * n_classes, ")")
-                break
-            elseif done - last >= progress_every
-                println("Progress: ", done, "/", n_per_pattern,
-                    " reps (per class=", done, ", total images=", done * n_classes, ")")
-                last = done
+    return maybe_diag(:start_generation_logger!) do
+        progress_every <= 0 && return nothing
+        return @async begin
+            last = 0
+            while true
+                done = reps_done[]
+                if done >= n_per_pattern
+                    println("Progress: ", n_per_pattern, "/", n_per_pattern,
+                        " reps (per class=", n_per_pattern, ", total images=", n_per_pattern * n_classes, ")")
+                    break
+                elseif done - last >= progress_every
+                    println("Progress: ", done, "/", n_per_pattern,
+                        " reps (per class=", done, ", total images=", done * n_classes, ")")
+                    last = done
+                end
+                sleep(0.25)
             end
-            sleep(0.25)
         end
     end
 end
 
-# Generate ERP images (single process, optional threading) with legacy keyword args.
-function generate_erp_images(; n_per_pattern::Int = 10,
-        mu_dist::Distribution = Normal(3.2, 0.3),
-        sigma_dist::Distribution = Normal(0.5, 0.1),
-        epoch_duration_dist::Distribution = Normal(1.0, 0.25),
-        sampling_rate_dist::Distribution = Normal(100, 5),
-        dropout_trials_rate_dist::Distribution = DEFAULT_DROPOUT_RATE_DIST,
-        n_trials_dist::Distribution = DEFAULT_N_TRIALS_DIST,
-        p100_width_dist::Distribution = Normal(0.1, 0.015),
-        p100_offset_dist::Distribution = Normal(0.1, 0.015),
-        p300_width_dist::Distribution = Normal(0.3, 0.045),
-        p300_offset_dist::Distribution = Normal(0.3, 0.045),
-        n170_width_dist::Distribution = Normal(0.15, 0.0225),
-        n170_offset_dist::Distribution = Normal(0.17, 0.0255),
-        p1_beta_dist::Distribution = Normal(5.0, 1.0),
-        p3_beta_dist::Distribution = Normal(5.0, 0.75),
-        n1_beta1_dist::Distribution = Normal(5.0, 0.75),
-        n1_beta2_dist::Distribution = Normal(3.0, 0.45),
-        n1_beta3_dist::Distribution = Normal(2.0, 0.3),
-        componentA_amp_dist::Distribution = Normal(5.0, 1.0),
-        componentB_amp_dist::Distribution = Normal(-10.0, 1.0),
-        componentC_amp_dist::Distribution = Normal(5.0, 1.0),
-        patterns = PATTERN_NAMES,
-        covariate_dists = default_pattern_covariates(),
-        target_height::Int = 64,
-        target_width::Int = 64,
-        zscore_timepoints::Bool = true,
-        resize_antialias::Bool = true,
-        low_pass_factor::Real = 0.75,
-        resize_method = Interpolations.Linear(),
-        noise_pool = DEFAULT_NOISE_POOL,
-        noiselevel_dists = DEFAULT_NOISELEVEL_DISTS,
-        crop_start_dist = DEFAULT_CROP_START_DIST,
-        crop_end_dist = DEFAULT_CROP_END_DIST,
-        threaded::Bool = false,
-        blas_threads::Int = 1,
-        progress_every::Int = 10)
+function _patterns_with_no_class(patterns::AbstractVector{Symbol})
+    return :no_class in patterns ? collect(patterns) : vcat(collect(patterns), [:no_class])
+end
 
-    ensure_latest_unfoldsim!(propagate = false)
+# Stage 1: Simulate raw ERP data.
+function simulate_raw_erp(config::GenerationConfig, rng::AbstractRNG)
+    return maybe_diag(:simulate_raw_erp) do
+        sim = config.sim
+        comp = config.components
+        pat = config.patterns
 
-    patterns = collect(patterns)
+        mu = max(1, rand(rng, sim.mu_dist))
+        sigma = max(0.01, rand(rng, sim.sigma_dist))
+        n_trials = Int(ceil(rand(rng, sim.n_trials_dist)))
+        n_trials = max(100, n_trials)
+        n_trials += isodd(n_trials) ? 1 : 0
+        sampling_rate = max(1, Int(round(rand(rng, sim.sampling_rate_dist))))
+        epoch_duration_s = rand(rng, sim.epoch_duration_dist)
+        epoch_duration_s <= 0 && throw(ArgumentError("epoch_duration_s must be > 0"))
 
-    noise = NoiseConfig(
-        noise_pool = noise_pool,
-        noiselevel_dists = noiselevel_dists,
-    )
+        sim_result = simulate_erp_trials(
+            rng, mu, sigma, n_trials, sampling_rate, epoch_duration_s,
+            comp.p100_width_dist, comp.p100_offset_dist, comp.p100_n170_gap_dist, comp.n170_p300_gap_dist,
+            comp.n170_width_dist, comp.p300_width_dist, comp.p1_beta_dist, comp.p3_beta_dist,
+            comp.n1_beta1_dist, comp.n1_beta2_dist, comp.n1_beta3_dist,
+            comp.componentA_amp_dist, comp.componentB_amp_dist, comp.componentC_amp_dist,
+            config.noise,
+            pat.patterns, pat.covariate_dists, pat.diverging_bar_levels,
+        )
 
-    processing = ProcessingConfig(
-        dropout_trials_rate_dist = dropout_trials_rate_dist,
-        crop_start_dist = crop_start_dist,
-        crop_end_dist = crop_end_dist,
-        zscore_timepoints = zscore_timepoints,
-        resize_antialias = resize_antialias,
-        low_pass_factor = low_pass_factor,
-        resize_method = resize_method,
-        target_height = target_height,
-        target_width = target_width,
-    )
+        raw_size = (size(sim_result.data, 2), size(sim_result.data, 1))
 
-    patterns_with_no_class = :no_class in patterns ? patterns : vcat(patterns, [:no_class])
-    n_classes = length(patterns_with_no_class) * VARIANT_COUNT
-    total = n_classes * n_per_pattern
+        params = (
+            mu = mu,
+            sigma = sigma,
+            epoch_duration_s = epoch_duration_s,
+            sampling_rate = sampling_rate,
+            erpimage_raw_size = raw_size,
+            noise = map(n -> string(typeof(n)), config.noise.noise_pool),
+            noiselevels = sim_result.noiselevels,
+            p1_beta = sim_result.p1_beta,
+            p3_beta = sim_result.p3_beta,
+            n1_betas = sim_result.n1_betas,
+            p100_width = sim_result.hanning_params.p100_width,
+            p100_offset = sim_result.hanning_params.p100_offset,
+            p100_n170_gap = sim_result.hanning_params.p100_n170_gap,
+            n170_width = sim_result.hanning_params.n170_width,
+            n170_offset = sim_result.hanning_params.n170_offset,
+            n170_p300_gap = sim_result.hanning_params.n170_p300_gap,
+            p300_width = sim_result.hanning_params.p300_width,
+            p300_offset = sim_result.hanning_params.p300_offset,
+        )
 
+        return (data = sim_result.data, events = sim_result.events, params = params)
+    end
+end
+
+# Stage 2: Apply trial dropout (before cropping).
+function apply_trial_dropout(data::AbstractMatrix, events, processing::ProcessingConfig, rng::AbstractRNG)
+    return maybe_diag(:apply_trial_dropout) do
+        dropout_trials_rate = rand(rng, processing.dropout_trials_rate_dist)
+        dropout_trials_rate = max(0, round(Int, dropout_trials_rate))
+
+        n_trials = size(data, 2)
+        drop_trials = clamp(Int(dropout_trials_rate), 0, max(0, n_trials - 1))
+
+        keep_trials = trues(n_trials)
+        if drop_trials > 0
+            drop_idx = randperm(rng, n_trials)[1:drop_trials]
+            keep_trials[drop_idx] .= false
+        end
+
+        kept_trials = findall(keep_trials)
+        if isempty(kept_trials)
+            throw(ArgumentError("apply_trial_dropout removed all trials; cannot proceed."))
+        end
+
+        dropped_data = data[:, kept_trials]
+        dropped_events = events[kept_trials, :]
+
+        params = (
+            dropout_trials_rate = dropout_trials_rate,
+            dropout_trials = drop_trials,
+        )
+
+        return (data = dropped_data, events = dropped_events, params = params)
+    end
+end
+
+# Stage 3: Crop time window.
+function apply_cropping(data::AbstractMatrix, processing::ProcessingConfig, rng::AbstractRNG, sampling_rate::Real)
+    return maybe_diag(:apply_cropping) do
+        cropped, crop_info = crop_time_window(data, rng, processing, sampling_rate)
+        return (data = cropped, params = crop_info)
+    end
+end
+
+# Stage 4: Apply z-score normalization (before sorting).
+function apply_zscore(data::AbstractMatrix, processing::ProcessingConfig)
+    return maybe_diag(:apply_zscore) do
+        if !processing.zscore_timepoints
+            return Float32.(data)
+        end
+        return Float32.(Normalization.normalize(Float64.(data), ZScore; dims = 2))
+    end
+end
+
+# Stage 5: Sort trials by pattern-specific sort values.
+function sort_by_patterns(data::AbstractMatrix, events, patterns::Vector{Symbol}, rng::AbstractRNG)
+    return maybe_diag(:sort_by_patterns) do
+        n_trials = size(data, 2)
+        images = Dict{Symbol, Matrix{Float32}}()
+
+        for pname in patterns
+            sortvalues = pattern_sort_values(pname, events, rng)
+            if sortvalues === nothing
+                throw(ArgumentError("sortvalues must be provided for all patterns (including :no_class)."))
+            end
+            if length(sortvalues) != n_trials
+                throw(ArgumentError("sortvalues length does not match number of trials; ensure each trial has a sort value."))
+            end
+
+            idx = sortperm(sortvalues)
+            data_sorted = data[:, idx]
+            images[pname] = Float32.(permutedims(data_sorted, (2, 1)))
+        end
+
+        return images
+    end
+end
+
+# Stage 6: Image processing (filter + resize).
+function process_images(images::Dict{Symbol, Matrix{Float32}}, processing::ProcessingConfig)
+    return maybe_diag(:process_images) do
+        processed = Dict{Symbol, Matrix{Float32}}()
+        processed_size = nothing
+
+        for (pname, img) in images
+            filtered = img
+            if processing.resize_antialias && processing.low_pass_factor > 0 && min(size(filtered)...) > 1
+                needs_resize = processing.target_height > 0 && processing.target_width > 0 &&
+                               size(filtered) != (processing.target_height, processing.target_width)
+                if needs_resize
+                    filtered = maybe_diag(:low_pass_filter) do
+                        antialias_sigma = (processing.low_pass_factor * size(filtered, 1) / processing.target_height,
+                            processing.low_pass_factor * size(filtered, 2) / processing.target_width)
+                        kernel = KernelFactors.gaussian(antialias_sigma)
+                        Float32.(imfilter(filtered, kernel, FILTER_BORDER))
+                    end
+                end
+            end
+
+            processed_size === nothing && (processed_size = size(filtered))
+
+            resized = maybe_diag(:resize_img) do
+                if size(filtered, 1) == 0 || size(filtered, 2) == 0
+                    throw(ArgumentError("process_images received empty image; cannot resize."))
+                end
+                out = Float32.(filtered)
+                if processing.target_height <= 0 || processing.target_width <= 0 ||
+                        size(out) == (processing.target_height, processing.target_width)
+                    return out
+                end
+                return Float32.(imresize(out, (processing.target_height, processing.target_width);
+                    method = processing.resize_method))
+            end
+
+            processed[pname] = resized
+        end
+
+        processed_size === nothing && (processed_size = (0, 0))
+        return (images = processed, processed_size = processed_size)
+    end
+end
+
+# Stage 7: Create variants.
+function create_variants(images::Dict{Symbol, Matrix{Float32}}, patterns::Vector{Symbol})
+    return maybe_diag(:create_variants) do
+        variants = Vector{NamedTuple}(undef, length(patterns) * VARIANT_COUNT)
+        idx = 1
+        for pname in patterns
+            base_img = images[pname]
+            reversed_img = reverse(base_img, dims = 1)
+            variant_imgs = (base_img, reversed_img, -base_img, -reversed_img)
+            for (vidx, spec) in enumerate(VARIANT_SPECS)
+                variants[idx] = (
+                    image = variant_imgs[vidx],
+                    pattern = pname,
+                    variant = spec.name,
+                    trial_order = spec.trial_order,
+                    inverted = spec.inverted,
+                )
+                idx += 1
+            end
+        end
+        return variants
+    end
+end
+
+# Stage 8: Attach metadata.
+function attach_metadata(variants::Vector{NamedTuple}, all_params::NamedTuple)
+    return maybe_diag(:attach_metadata) do
+        n = length(variants)
+        images = Vector{Matrix{Float32}}(undef, n)
+        labels = Vector{Symbol}(undef, n)
+        metadata = Vector{NamedTuple}(undef, n)
+
+        for i in 1:n
+            v = variants[i]
+            images[i] = v.image
+            labels[i] = v.pattern
+            metadata[i] = merge(all_params, (
+                pattern = v.pattern,
+                variant = v.variant,
+                trial_order = v.trial_order,
+                inverted = v.inverted,
+            ))
+        end
+
+        return images, labels, metadata
+    end
+end
+
+# Pipeline runner (single repetition).
+function run_pipeline(config::GenerationConfig, rng::AbstractRNG, patterns_with_no_class::Vector{Symbol})
+    return maybe_diag(:run_pipeline) do
+        raw = simulate_raw_erp(config, rng)
+        dropped = apply_trial_dropout(raw.data, raw.events, config.processing, rng)
+        cropped = apply_cropping(dropped.data, config.processing, rng, raw.params.sampling_rate)
+        normalized = apply_zscore(cropped.data, config.processing)
+
+        sorted = sort_by_patterns(normalized, dropped.events, patterns_with_no_class, rng)
+        processed = process_images(sorted, config.processing)
+        variants = create_variants(processed.images, patterns_with_no_class)
+
+        all_params = merge(raw.params, dropped.params, cropped.params, (
+            erpimage_processed_size = processed.processed_size,
+        ))
+
+        return attach_metadata(variants, all_params)
+    end
+end
+
+function _flatten_results(results::Vector{Tuple}, total::Int)
     images = Vector{Matrix{Float32}}(undef, total)
     labels = Vector{Symbol}(undef, total)
     metadata = Vector{NamedTuple}(undef, total)
 
-    if threaded
-        n = Threads.nthreads()
-        required = 16
-        if n < required
-            error("threaded=true requires $(required) Julia threads; restart the kernel with JULIA_NUM_THREADS=$(required).")
+    idx = 1
+    for (imgs, lbls, metas) in results
+        for j in eachindex(imgs)
+            images[idx] = imgs[j]
+            labels[idx] = lbls[j]
+            metadata[idx] = metas[j]
+            idx += 1
         end
     end
-    BLAS.set_num_threads(blas_threads)
 
-    nthreads = Threads.nthreads()
-    active_threads = max(1, Int(threaded) * nthreads)
-    rngs = [Random.Xoshiro(UInt(time_ns() + i)) for i in 1:active_threads]
-    reps_done = progress_every > 0 ? Threads.Atomic{Int}(0) : nothing
-    progress_task = progress_every > 0 ?
-        start_generation_logger!(reps_done, n_per_pattern, n_classes, progress_every) : nothing
-    progress_stride = progress_every > 0 ? max(1, progress_every) : 0
+    return images, labels, metadata
+end
 
-    chunk = cld(n_per_pattern, active_threads)
+# Generate ERP images (single process, optional threading).
+function generate_erp_images(n_per_pattern::Int;
+        config::GenerationConfig = GenerationConfig(),
+        enable_diagnostics::Bool = false)
+    DIAGNOSTICS_ENABLED[] = enable_diagnostics
+    enable_diagnostics!(enable_diagnostics; propagate = false)
+    if enable_diagnostics
+        reset_diagnostics!()
+    end
+    verify_unfoldsim_version!()
 
-    # Build a chunk of images on a single thread.
-    function build_chunk!(chunk_id::Int)
-        rep_start = (chunk_id - 1) * chunk + 1
-        rep_end = min(n_per_pattern, chunk_id * chunk)
-        rep_start > rep_end && return
+    result = maybe_diag(:generate_erp_images) do
+        threaded = config.runtime.threaded
+        n_threads = threaded ? Threads.nthreads() : 1
 
-        local_rng = rngs[chunk_id]
-        local_done = 0
+        if threaded && n_threads < 16
+            error("threaded=true requires 16 Julia threads; restart the kernel with JULIA_NUM_THREADS=16.")
+        end
 
-        for rep in rep_start:rep_end
-            mu = max(1, rand(local_rng, mu_dist))
-            sigma = max(0.01, rand(local_rng, sigma_dist))
-            n_trials = Int(ceil(rand(local_rng, n_trials_dist)))
-            n_trials = max(100, n_trials)
-            n_trials += isodd(n_trials) ? 1 : 0
-            sampling_rate = max(1, Int(round(rand(local_rng, sampling_rate_dist))))
-            epoch_duration_s = rand(local_rng, epoch_duration_dist)
-            epoch_duration_s <= 0 && throw(ArgumentError("epoch_duration_s must be > 0"))
+        BLAS.set_num_threads(config.runtime.blas_threads)
 
-            sim_result = simulate_erp_trials(local_rng, mu, sigma, n_trials, sampling_rate, epoch_duration_s,
-                p100_width_dist, p100_offset_dist, p300_width_dist, p300_offset_dist,
-                n170_width_dist, n170_offset_dist, p1_beta_dist, p3_beta_dist,
-                n1_beta1_dist, n1_beta2_dist, n1_beta3_dist,
-                componentA_amp_dist, componentB_amp_dist, componentC_amp_dist,
-                noise,
-                patterns, covariate_dists)
-            generated_size = (size(sim_result.data, 2), size(sim_result.data, 1))
-            cropped, crop_info = crop_time_window(sim_result.data, local_rng, processing, sampling_rate)
-            base = (rep - 1) * n_classes
+        patterns = _patterns_with_no_class(config.patterns.patterns)
+        n_classes = length(patterns) * VARIANT_COUNT
+        total = n_classes * n_per_pattern
 
-            render_pattern_images!(
-                images, labels, metadata, base,
-                cropped, sim_result, mu, sigma, epoch_duration_s, sampling_rate,
-                noise, processing, crop_info, generated_size, patterns_with_no_class;
-                rng = local_rng,
-            )
+        base_seed = time_ns()
+        rngs = [Random.Xoshiro(UInt(base_seed) + UInt64(i) * 0x9E3779B97F4A7C15) for i in 1:n_threads]
+        results_per_thread = [Vector{Tuple}() for _ in 1:n_threads]
 
-            if reps_done !== nothing
-                local_done += 1
-                if local_done >= progress_stride
-                    Threads.atomic_add!(reps_done, local_done)
-                    local_done = 0
+        progress_counter = config.runtime.show_progress && config.runtime.progress_every > 0 ?
+            Threads.Atomic{Int}(0) : nothing
+        progress_task = progress_counter === nothing ? nothing :
+            start_generation_logger!(progress_counter, n_per_pattern, n_classes, config.runtime.progress_every)
+
+        chunk_size = cld(n_per_pattern, n_threads)
+
+        function process_chunk!(chunk_id::Int, start_idx::Int, end_idx::Int)
+            rng = rngs[chunk_id]
+            local_results = results_per_thread[chunk_id]
+            for _ in start_idx:end_idx
+                result = run_pipeline(config, rng, patterns)
+                push!(local_results, result)
+
+                if progress_counter !== nothing
+                    Threads.atomic_add!(progress_counter, 1)
                 end
             end
         end
 
-        if reps_done !== nothing && local_done > 0
-            Threads.atomic_add!(reps_done, local_done)
+        if threaded
+            Threads.@threads :static for chunk_id in 1:n_threads
+                start_idx = (chunk_id - 1) * chunk_size + 1
+                end_idx = min(chunk_id * chunk_size, n_per_pattern)
+                if start_idx <= end_idx
+                    process_chunk!(chunk_id, start_idx, end_idx)
+                end
+            end
+        else
+            process_chunk!(1, 1, n_per_pattern)
         end
+
+        progress_task !== nothing && wait(progress_task)
+
+        all_results = vcat(results_per_thread...)
+        images, labels, metadata = _flatten_results(all_results, total)
+
+        return images, labels, metadata
     end
 
-    if threaded
-        Threads.@threads :static for chunk_id in 1:active_threads
-            build_chunk!(chunk_id)
-        end
-    else
-        build_chunk!(1)
+    if enable_diagnostics
+        print_diagnostics_tree()
     end
 
-    progress_task !== nothing && wait(progress_task)
-
-    return images, labels, metadata
+    return result
 end
