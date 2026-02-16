@@ -14,7 +14,7 @@ end
 function simulate_pattern_trials(rng::AbstractRNG, mu::Real, sigma::Real,
         n_trials::Int, sampling_rate::Int, epoch_duration_s::Real,
         p100_width_dist::Distribution,
-        p100_offset_dist::Distribution,
+        p100_window_offset_dist::Distribution,
         p100_n170_gap_dist::Distribution,
         n170_p300_gap_dist::Distribution,
         n170_width_dist::Distribution,
@@ -53,24 +53,38 @@ function simulate_pattern_trials(rng::AbstractRNG, mu::Real, sigma::Real,
         signal_len = max(2, Int(round(epoch_duration_s * sr)) + 1)
 
         min_sample = 1 / sr
+        min_width = (2 * min_sample) + eps(Float64(min_sample))
 
-        p100_width = max(min_sample, rand(rng, p100_width_dist))
-        p100_offset = rand(rng, p100_offset_dist)
-        min_p100_offset = (p100_width / 2) + min_sample
-        p100_offset = max(p100_offset, min_p100_offset)
+        sample_peak_offset(center, width) = begin
+            peak_min = center - width / 2 + min_sample
+            peak_max = center + width / 2 - min_sample
+            if peak_min < peak_max
+                return rand(rng, Uniform(peak_min, peak_max))
+            end
+            # Fallback for numerical edge-cases when no open interval remains.
+            return center
+        end
+
+        p100_width = max(min_width, rand(rng, p100_width_dist))
+        p100_window_center = rand(rng, p100_window_offset_dist)
+        min_p100_window_center = (p100_width / 2) + min_sample
+        p100_window_center = max(p100_window_center, min_p100_window_center)
+        p100_offset = sample_peak_offset(p100_window_center, p100_width)
 
         # Draw component gaps from distributions instead of using hard-coded means.
-        n170_width = max(min_sample, rand(rng, n170_width_dist))
+        n170_width = max(min_width, rand(rng, n170_width_dist))
         p100_n170_gap = max(min_sample, rand(rng, p100_n170_gap_dist))
-        n170_offset = p100_offset + p100_n170_gap
-        min_n170_offset = (n170_width / 2) + min_sample
-        n170_offset = max(n170_offset, min_n170_offset)
+        n170_window_center = p100_window_center + p100_n170_gap
+        min_n170_window_center = (n170_width / 2) + min_sample
+        n170_window_center = max(n170_window_center, min_n170_window_center)
+        n170_offset = sample_peak_offset(n170_window_center, n170_width)
 
-        p300_width = max(min_sample, rand(rng, p300_width_dist))
+        p300_width = max(min_width, rand(rng, p300_width_dist))
         n170_p300_gap = max(min_sample, rand(rng, n170_p300_gap_dist))
-        p300_offset = n170_offset + n170_p300_gap
-        min_p300_offset = (p300_width / 2) + min_sample
-        p300_offset = max(p300_offset, min_p300_offset)
+        p300_window_center = n170_window_center + n170_p300_gap
+        min_p300_window_center = (p300_width / 2) + min_sample
+        p300_window_center = max(p300_window_center, min_p300_window_center)
+        p300_offset = sample_peak_offset(p300_window_center, p300_width)
 
         p1_beta = rand(rng, p1_beta_dist)
         p1_basis = UnfoldSim.hanning(p100_width, p100_offset, sr)
@@ -169,12 +183,15 @@ function simulate_pattern_trials(rng::AbstractRNG, mu::Real, sigma::Real,
 
         hanning_params = (
             p100_width = p100_width,
+            p100_window_center = p100_window_center,
             p100_offset = p100_offset,
             p100_n170_gap = p100_n170_gap,
             n170_width = n170_width,
+            n170_window_center = n170_window_center,
             n170_offset = n170_offset,
             n170_p300_gap = n170_p300_gap,
             p300_width = p300_width,
+            p300_window_center = p300_window_center,
             p300_offset = p300_offset,
         )
 
@@ -199,7 +216,7 @@ end
 function simulate_erp_trials(rng::AbstractRNG, mu::Real, sigma::Real,
         n_trials::Int, sampling_rate::Int, epoch_duration_s::Real,
         p100_width_dist::Distribution,
-        p100_offset_dist::Distribution,
+        p100_window_offset_dist::Distribution,
         p100_n170_gap_dist::Distribution,
         n170_p300_gap_dist::Distribution,
         n170_width_dist::Distribution,
@@ -219,7 +236,7 @@ function simulate_erp_trials(rng::AbstractRNG, mu::Real, sigma::Real,
     return maybe_diag(:simulate_erp_trials) do
         with_logger(NullLogger()) do
             return simulate_pattern_trials(rng, mu, sigma, n_trials, sampling_rate, epoch_duration_s,
-                p100_width_dist, p100_offset_dist, p100_n170_gap_dist, n170_p300_gap_dist,
+                p100_width_dist, p100_window_offset_dist, p100_n170_gap_dist, n170_p300_gap_dist,
                 n170_width_dist, p300_width_dist, p1_beta_dist, p3_beta_dist,
                 n1_beta1_dist, n1_beta2_dist, n1_beta3_dist,
                 componentA_amp_dist, componentB_amp_dist, componentC_amp_dist,

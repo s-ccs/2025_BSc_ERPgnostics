@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PY312_ROOT="$ROOT_DIR/.tools/python312/usr"
+
+export LD_LIBRARY_PATH="$PY312_ROOT/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+exec "$PY312_ROOT/bin/python3.12" "$@"

@@ -55,7 +55,7 @@ end
 
 Base.@kwdef struct ComponentConfig
     p100_width_dist::Distribution = Normal(0.1, 0.015)
-    p100_offset_dist::Distribution = Normal(0.1, 0.015)
+    p100_window_offset_dist::Distribution = Normal(0.1, 0.015)
     p100_n170_gap_dist::Distribution = Normal(0.07, 0.015)
     n170_p300_gap_dist::Distribution = Normal(0.13, 0.02)
     p300_width_dist::Distribution = Normal(0.3, 0.045)

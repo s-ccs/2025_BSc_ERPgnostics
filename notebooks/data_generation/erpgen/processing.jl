@@ -187,10 +187,13 @@ function render_pattern_images!(images::AbstractVector{Matrix{Float32}},
                     p3_beta = sim_result.p3_beta,
                     n1_betas = sim_result.n1_betas,
                     p100_width = sim_result.hanning_params.p100_width,
+                    p100_window_center = sim_result.hanning_params.p100_window_center,
                     p100_offset = sim_result.hanning_params.p100_offset,
                     p300_width = sim_result.hanning_params.p300_width,
+                    p300_window_center = sim_result.hanning_params.p300_window_center,
                     p300_offset = sim_result.hanning_params.p300_offset,
                     n170_width = sim_result.hanning_params.n170_width,
+                    n170_window_center = sim_result.hanning_params.n170_window_center,
                     n170_offset = sim_result.hanning_params.n170_offset,
                 )
             end

@@ -43,7 +43,7 @@ function simulate_raw_erp(config::GenerationConfig, rng::AbstractRNG)
 
         sim_result = simulate_erp_trials(
             rng, mu, sigma, n_trials, sampling_rate, epoch_duration_s,
-            comp.p100_width_dist, comp.p100_offset_dist, comp.p100_n170_gap_dist, comp.n170_p300_gap_dist,
+            comp.p100_width_dist, comp.p100_window_offset_dist, comp.p100_n170_gap_dist, comp.n170_p300_gap_dist,
             comp.n170_width_dist, comp.p300_width_dist, comp.p1_beta_dist, comp.p3_beta_dist,
             comp.n1_beta1_dist, comp.n1_beta2_dist, comp.n1_beta3_dist,
             comp.componentA_amp_dist, comp.componentB_amp_dist, comp.componentC_amp_dist,
@@ -65,12 +65,15 @@ function simulate_raw_erp(config::GenerationConfig, rng::AbstractRNG)
             p3_beta = sim_result.p3_beta,
             n1_betas = sim_result.n1_betas,
             p100_width = sim_result.hanning_params.p100_width,
+            p100_window_center = sim_result.hanning_params.p100_window_center,
             p100_offset = sim_result.hanning_params.p100_offset,
             p100_n170_gap = sim_result.hanning_params.p100_n170_gap,
             n170_width = sim_result.hanning_params.n170_width,
+            n170_window_center = sim_result.hanning_params.n170_window_center,
             n170_offset = sim_result.hanning_params.n170_offset,
             n170_p300_gap = sim_result.hanning_params.n170_p300_gap,
             p300_width = sim_result.hanning_params.p300_width,
+            p300_window_center = sim_result.hanning_params.p300_window_center,
             p300_offset = sim_result.hanning_params.p300_offset,
         )
 
@@ -118,17 +121,25 @@ function apply_cropping(data::AbstractMatrix, processing::ProcessingConfig, rng:
     end
 end
 
-# Stage 4: Apply z-score normalization (before sorting).
-function apply_zscore(data::AbstractMatrix, processing::ProcessingConfig)
+# Post-processing: apply z-score normalization after resize.
+function apply_zscore(images::Dict{Symbol, Matrix{Float32}}, processing::ProcessingConfig)
     return maybe_diag(:apply_zscore) do
         if !processing.zscore_timepoints
-            return Float32.(data)
+            return images
         end
-        return Float32.(Normalization.normalize(Float64.(data), ZScore; dims = 2))
+
+        normalized = Dict{Symbol, Matrix{Float32}}()
+        for (pname, img) in images
+            normalized[pname] = maybe_diag(:zscore_timepoints) do
+                # After transposition, rows=trials and cols=timepoints.
+                Float32.(Normalization.normalize(Float64.(img), ZScore; dims = 1))
+            end
+        end
+        return normalized
     end
 end
 
-# Stage 5: Sort trials by pattern-specific sort values.
+# Stage 4: Sort trials by pattern-specific sort values.
 function sort_by_patterns(data::AbstractMatrix, events, patterns::Vector{Symbol}, rng::AbstractRNG)
     return maybe_diag(:sort_by_patterns) do
         n_trials = size(data, 2)
@@ -152,7 +163,7 @@ function sort_by_patterns(data::AbstractMatrix, events, patterns::Vector{Symbol}
     end
 end
 
-# Stage 6: Image processing (filter + resize).
+# Stage 5: Image processing (filter + resize).
 function process_images(images::Dict{Symbol, Matrix{Float32}}, processing::ProcessingConfig)
     return maybe_diag(:process_images) do
         processed = Dict{Symbol, Matrix{Float32}}()
@@ -250,11 +261,10 @@ function run_pipeline(config::GenerationConfig, rng::AbstractRNG, patterns_with_
         raw = simulate_raw_erp(config, rng)
         dropped = apply_trial_dropout(raw.data, raw.events, config.processing, rng)
         cropped = apply_cropping(dropped.data, config.processing, rng, raw.params.sampling_rate)
-        normalized = apply_zscore(cropped.data, config.processing)
-
-        sorted = sort_by_patterns(normalized, dropped.events, patterns_with_no_class, rng)
+        sorted = sort_by_patterns(cropped.data, dropped.events, patterns_with_no_class, rng)
         processed = process_images(sorted, config.processing)
-        variants = create_variants(processed.images, patterns_with_no_class)
+        normalized = apply_zscore(processed.images, config.processing)
+        variants = create_variants(normalized, patterns_with_no_class)
 
         all_params = merge(raw.params, dropped.params, cropped.params, (
             erpimage_processed_size = processed.processed_size,

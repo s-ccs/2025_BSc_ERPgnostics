@@ -24,3 +24,15 @@ docs/site/
 *.asv
 *.m~
 
+# Local tooling/cache/editor dirs
+.label-studio-data/
+.tools/
+.venv/
+.venvs/
+.vscode/
+
+# Data and exported assets
+*.jld2
+*.hdf5
+*.csv
+*.png
