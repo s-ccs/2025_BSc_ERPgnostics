@@ -5,5 +5,8 @@
   "jupyter.kernelspecPaths": [
     "${workspaceFolder}/.venv/share/jupyter/kernels",
     "${env:HOME}/.local/share/jupyter/kernels"
-  ]
+  ],
+  "julia.environmentPath": "/home/benjamin/Dokumente/BA2/notebooks/model_test",
+  "julia.executablePath": "/home/benjamin/.juliaup/bin/julia",
+  "julia.languageServerExecutablePath": "/home/benjamin/.juliaup/bin/julia"
 }

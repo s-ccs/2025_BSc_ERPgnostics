@@ -1,0 +1,13 @@
+<View>
+  <Header value="ch=$channel | sort=$sort_variable"/>
+  <Image name="image" value="$image"/>
+  <Choices name="erp_class" toName="image" choice="single" required="true" showInLine="true">
+    <Choice value="Sigmoid" alias="1"/>
+    <Choice value="One Sided Fan" alias="2"/>
+    <Choice value="Two Sided Fan" alias="3"/>
+    <Choice value="Diverging Bar" alias="4"/>
+    <Choice value="Hourglass" alias="5"/>
+    <Choice value="Tilted Bar" alias="6"/>
+    <Choice value="No Class" alias="0"/>
+  </Choices>
+</View>
