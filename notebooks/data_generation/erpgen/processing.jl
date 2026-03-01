@@ -1,6 +1,6 @@
 # Build an ERP image (trials x time) with sorting, optional dropout, and optional z-score.
 function build_sorted_erpimage(data_all::AbstractMatrix, sortvalues;
-        rng::AbstractRNG = MersenneTwister(time_ns()),
+        rng::AbstractRNG = fresh_rng(),
         dropout_trials_rate::Real = 0.0,
         zscore_timepoints::Bool = true)
     return maybe_diag(:build_sorted_erpimage) do
@@ -21,7 +21,7 @@ function build_sorted_erpimage(data_all::AbstractMatrix, sortvalues;
             throw(ArgumentError("build_sorted_erpimage produced empty sorted data; cannot proceed."))
         end
 
-        data_sorted, dropout_info = apply_trial_dropout(data_sorted, rng, dropout_trials_rate)
+        data_sorted, dropout_info = apply_trial_dropout(data_sorted, fresh_rng(rng), dropout_trials_rate)
 
         if zscore_timepoints
             data_sorted = maybe_diag(:zscore_timepoints) do
@@ -44,8 +44,9 @@ function crop_time_window(data_time_trials::AbstractMatrix, rng::AbstractRNG, cr
             return data_time_trials, (crop_start_ms = 0, crop_end_ms = 0, crop_start_samples = 0, crop_end_samples = 0)
         end
 
-        start_ms = Int(round(max(0, rand(rng, crop_start_dist))))
-        end_ms = Int(round(max(0, rand(rng, crop_end_dist))))
+        crop_rng = fresh_rng(rng)
+        start_ms = Int(round(max(0, rand(crop_rng, crop_start_dist))))
+        end_ms = Int(round(max(0, rand(crop_rng, crop_end_dist))))
         start_samples = Int(round(start_ms * sampling_rate / 1000))
         end_samples = Int(round(end_ms * sampling_rate / 1000))
 
@@ -76,11 +77,12 @@ function apply_trial_dropout(data_time_trials::AbstractMatrix, rng::AbstractRNG,
             throw(ArgumentError("apply_trial_dropout received empty data; cannot proceed."))
         end
 
+        dropout_rng = fresh_rng(rng)
         drop_trials = clamp(Int(round(dropout_trials_rate)), 0, max(0, n_trials - 1))
 
         keep_trials = trues(n_trials)
         if drop_trials > 0
-            drop_idx = randperm(rng, n_trials)[1:drop_trials]
+            drop_idx = randperm(dropout_rng, n_trials)[1:drop_trials]
             keep_trials[drop_idx] .= false
         end
 
@@ -110,17 +112,19 @@ function render_pattern_images!(images::AbstractVector{Matrix{Float32}},
         crop_info::NamedTuple,
         generated_size::Tuple{Int, Int},
         patterns::AbstractVector{Symbol};
-        rng::AbstractRNG = MersenneTwister(time_ns()))
+        rng::AbstractRNG = fresh_rng())
     return maybe_diag(:render_pattern_images!) do
         # Sample concrete dropout counts once per simulation.
-        dropout_trials_rate = rand(rng, processing.dropout_trials_rate_dist)
+        dropout_rng = fresh_rng(rng)
+        dropout_trials_rate = rand(dropout_rng, processing.dropout_trials_rate_dist)
         dropout_trials_rate = max(0, round(Int, dropout_trials_rate))
 
         # Render each pattern with its own sorting rule and metadata.
         for (pidx, pname) in enumerate(patterns)
-            sortvalues = pattern_sort_values(pname, sim_result.events, rng)
+            pattern_rng = fresh_rng(rng)
+            sortvalues = pattern_sort_values(pname, sim_result.events, pattern_rng)
             img, dropout_info = build_sorted_erpimage(data, sortvalues;
-                rng = rng,
+                rng = fresh_rng(pattern_rng),
                 dropout_trials_rate = dropout_trials_rate,
                 zscore_timepoints = processing.zscore_timepoints,
             )

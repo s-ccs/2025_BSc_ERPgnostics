@@ -36,3 +36,6 @@ docs/site/
 *.hdf5
 *.csv
 *.png
+*.fdt
+*.set
+*.xlsx

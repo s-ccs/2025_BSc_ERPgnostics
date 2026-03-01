@@ -7,6 +7,7 @@ using CairoMakie: cgrad, Reverse
 
 export gaussian_kernel, zscore_timepoints
 export make_diverging_cmap_zero_centered, clipped_color_stats, clipped_color_stats_filter_row
+export make_diverging_cmap_zero_anchored, clipped_color_stats_quantile_zero_ticks
 
 """
     gaussian_kernel(low_pass_factor, in_size, out_size, kernel_size=(21, 21))
@@ -75,6 +76,54 @@ function make_diverging_cmap_zero_centered(vmin::Real, vmax::Real)
 end
 
 """
+    make_diverging_cmap_zero_anchored(vmin, vmax; n_steps=64)
+
+Build a diverging colormap where value 0 is mapped to white exactly.
+Works for mixed-sign, only-positive, and only-negative ranges.
+"""
+function make_diverging_cmap_zero_anchored(vmin::Real, vmax::Real; n_steps::Int = 64)
+    vmin_f = Float64(vmin)
+    vmax_f = Float64(vmax)
+    vmax_f <= vmin_f && (vmax_f = vmin_f + 1e-6)
+
+    src = cgrad(:RdBu, rev = true) # blue -> white -> red
+    zero_pos = clamp((0.0 - vmin_f) / (vmax_f - vmin_f), 0.0, 1.0)
+    n_steps = max(2, n_steps)
+
+    if zero_pos <= 0.0
+        # Only positive range: white at lower bound, then red branch.
+        colors = [src[0.5 + 0.5 * i / n_steps] for i in 0:n_steps]
+        positions = collect(range(0.0, 1.0; length = n_steps + 1))
+        return cgrad(colors, positions)
+    elseif zero_pos >= 1.0
+        # Only negative range: blue branch, then white at upper bound.
+        colors = [src[0.0 + 0.5 * i / n_steps] for i in 0:n_steps]
+        positions = collect(range(0.0, 1.0; length = n_steps + 1))
+        return cgrad(colors, positions)
+    end
+
+    # Mixed-sign range: stretch both halves to hit white exactly at 0.
+    colors = Vector{Any}(undef, 2 * n_steps + 1)
+    positions = Vector{Float64}(undef, 2 * n_steps + 1)
+
+    for i in 0:n_steps
+        src_t = 0.5 * i / n_steps
+        dst_t = zero_pos * i / n_steps
+        colors[i + 1] = src[src_t]
+        positions[i + 1] = dst_t
+    end
+
+    for i in 1:n_steps
+        src_t = 0.5 + 0.5 * i / n_steps
+        dst_t = zero_pos + (1.0 - zero_pos) * i / n_steps
+        colors[n_steps + 1 + i] = src[src_t]
+        positions[n_steps + 1 + i] = dst_t
+    end
+
+    return cgrad(colors, positions)
+end
+
+"""
     clipped_color_stats(data; q_low=0.01, q_high=0.99)
 
 Compute symmetric color stats for the reference (top) row.
@@ -138,6 +187,74 @@ function clipped_color_stats_filter_row(data::AbstractMatrix; q_low::Float64=0.0
     end
 
     tick_labels = [@sprintf("%.3f", t) for t in tick_vals]
+    return clipped, crange, tick_vals, tick_labels, cmap
+end
+
+"""
+    clipped_color_stats_quantile_zero_ticks(data; q_low=0.01, q_high=0.99)
+
+Asymmetric quantile clipping with explicit zero anchoring:
+- mixed-sign data: clip to [q_low, q_high]
+- only-positive data: clip to [0, q_high]
+- only-negative data: clip to [q_low, 0]
+
+Returns `(clipped, colorrange, tick_vals, tick_labels, colormap)` where ticks
+represent `q_low`, `0`, `q_high` (sorted for plotting stability).
+"""
+function clipped_color_stats_quantile_zero_ticks(data::AbstractMatrix; q_low::Float64 = 0.01, q_high::Float64 = 0.99)
+    vals = Float32[]
+    for v in data
+        fv = Float32(v)
+        isfinite(fv) && push!(vals, fv)
+    end
+    isempty(vals) && push!(vals, 0f0)
+
+    ql = Float32(quantile(vals, q_low))
+    qh = Float32(quantile(vals, q_high))
+    qh < ql && (qh = ql)
+
+    all_nonneg = all(x -> x >= 0f0, vals)
+    all_nonpos = all(x -> x <= 0f0, vals)
+
+    vmin = ql
+    vmax = qh
+    if all_nonneg
+        vmin = 0f0
+        vmax = max(qh, 1f-6)
+    elseif all_nonpos
+        vmin = min(ql, -1f-6)
+        vmax = 0f0
+    else
+        vmin = min(ql, 0f0)
+        vmax = max(qh, 0f0)
+    end
+
+    if vmax <= vmin
+        delta = max(abs(vmin), abs(vmax), 1f0) * 1f-6
+        vmin -= delta
+        vmax += delta
+    end
+
+    clipped = clamp.(Float32.(data), vmin, vmax)
+    crange = (vmin, vmax)
+    cmap = make_diverging_cmap_zero_anchored(vmin, vmax)
+
+    # Keep semantic ticks (q_low, 0, q_high), but sort for colorbar rendering.
+    raw_ticks = Float32[ql, 0f0, qh]
+    raw_labels = [@sprintf("%.3f", ql), @sprintf("%.3f", 0f0), @sprintf("%.3f", qh)]
+    pairs = collect(zip(raw_ticks, raw_labels))
+    sort!(pairs; by = first)
+
+    tick_vals = Float32[pairs[1][1], pairs[2][1], pairs[3][1]]
+    tick_labels = [pairs[1][2], pairs[2][2], pairs[3][2]]
+
+    # Avoid duplicated tick positions for plotting backends.
+    for i in 2:3
+        if tick_vals[i] <= tick_vals[i - 1]
+            tick_vals[i] = nextfloat(tick_vals[i - 1])
+        end
+    end
+
     return clipped, crange, tick_vals, tick_labels, cmap
 end
 

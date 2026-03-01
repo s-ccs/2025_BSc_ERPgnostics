@@ -28,27 +28,29 @@ end
 # Stage 1: Simulate raw ERP data.
 function simulate_raw_erp(config::GenerationConfig, rng::AbstractRNG)
     return maybe_diag(:simulate_raw_erp) do
+        param_rng = fresh_rng(rng)
+        simulate_rng = fresh_rng(rng)
         sim = config.sim
         comp = config.components
         pat = config.patterns
 
-        mu = max(1, rand(rng, sim.mu_dist))
-        sigma = max(0.01, rand(rng, sim.sigma_dist))
-        n_trials = Int(ceil(rand(rng, sim.n_trials_dist)))
+        mu = max(1, rand(param_rng, sim.mu_dist))
+        sigma = max(0.01, rand(param_rng, sim.sigma_dist))
+        n_trials = Int(ceil(rand(param_rng, sim.n_trials_dist)))
         n_trials = max(100, n_trials)
         n_trials += isodd(n_trials) ? 1 : 0
-        sampling_rate = max(1, Int(round(rand(rng, sim.sampling_rate_dist))))
-        epoch_duration_s = rand(rng, sim.epoch_duration_dist)
+        sampling_rate = max(1, Int(round(rand(param_rng, sim.sampling_rate_dist))))
+        epoch_duration_s = rand(param_rng, sim.epoch_duration_dist)
         epoch_duration_s <= 0 && throw(ArgumentError("epoch_duration_s must be > 0"))
 
         sim_result = simulate_erp_trials(
-            rng, mu, sigma, n_trials, sampling_rate, epoch_duration_s,
+            simulate_rng, mu, sigma, n_trials, sampling_rate, epoch_duration_s,
             comp.p100_width_dist, comp.p100_window_offset_dist, comp.p100_n170_gap_dist, comp.n170_p300_gap_dist,
             comp.n170_width_dist, comp.p300_width_dist, comp.p1_beta_dist, comp.p3_beta_dist,
             comp.n1_beta1_dist, comp.n1_beta2_dist, comp.n1_beta3_dist,
             comp.componentA_amp_dist, comp.componentB_amp_dist, comp.componentC_amp_dist,
             config.noise,
-            pat.patterns, pat.covariate_dists, pat.diverging_bar_levels,
+            pat.loaded_patterns, pat.covariate_dists, pat.diverging_bar_levels,
         )
 
         raw_size = (size(sim_result.data, 2), size(sim_result.data, 1))
@@ -60,6 +62,7 @@ function simulate_raw_erp(config::GenerationConfig, rng::AbstractRNG)
             sampling_rate = sampling_rate,
             erpimage_raw_size = raw_size,
             noise = map(n -> string(typeof(n)), config.noise.noise_pool),
+            loaded_patterns = collect(pat.loaded_patterns),
             noiselevels = sim_result.noiselevels,
             p1_beta = sim_result.p1_beta,
             p3_beta = sim_result.p3_beta,
@@ -84,7 +87,8 @@ end
 # Stage 2: Apply trial dropout (before cropping).
 function apply_trial_dropout(data::AbstractMatrix, events, processing::ProcessingConfig, rng::AbstractRNG)
     return maybe_diag(:apply_trial_dropout) do
-        dropout_trials_rate = rand(rng, processing.dropout_trials_rate_dist)
+        dropout_rng = fresh_rng(rng)
+        dropout_trials_rate = rand(dropout_rng, processing.dropout_trials_rate_dist)
         dropout_trials_rate = max(0, round(Int, dropout_trials_rate))
 
         n_trials = size(data, 2)
@@ -92,7 +96,7 @@ function apply_trial_dropout(data::AbstractMatrix, events, processing::Processin
 
         keep_trials = trues(n_trials)
         if drop_trials > 0
-            drop_idx = randperm(rng, n_trials)[1:drop_trials]
+            drop_idx = randperm(dropout_rng, n_trials)[1:drop_trials]
             keep_trials[drop_idx] .= false
         end
 
@@ -116,7 +120,7 @@ end
 # Stage 3: Crop time window.
 function apply_cropping(data::AbstractMatrix, processing::ProcessingConfig, rng::AbstractRNG, sampling_rate::Real)
     return maybe_diag(:apply_cropping) do
-        cropped, crop_info = crop_time_window(data, rng, processing, sampling_rate)
+        cropped, crop_info = crop_time_window(data, fresh_rng(rng), processing, sampling_rate)
         return (data = cropped, params = crop_info)
     end
 end
@@ -146,7 +150,7 @@ function sort_by_patterns(data::AbstractMatrix, events, patterns::Vector{Symbol}
         images = Dict{Symbol, Matrix{Float32}}()
 
         for pname in patterns
-            sortvalues = pattern_sort_values(pname, events, rng)
+            sortvalues = pattern_sort_values(pname, events, fresh_rng(rng))
             if sortvalues === nothing
                 throw(ArgumentError("sortvalues must be provided for all patterns (including :no_class)."))
             end
@@ -258,10 +262,10 @@ end
 # Pipeline runner (single repetition).
 function run_pipeline(config::GenerationConfig, rng::AbstractRNG, patterns_with_no_class::Vector{Symbol})
     return maybe_diag(:run_pipeline) do
-        raw = simulate_raw_erp(config, rng)
-        dropped = apply_trial_dropout(raw.data, raw.events, config.processing, rng)
-        cropped = apply_cropping(dropped.data, config.processing, rng, raw.params.sampling_rate)
-        sorted = sort_by_patterns(cropped.data, dropped.events, patterns_with_no_class, rng)
+        raw = simulate_raw_erp(config, fresh_rng(rng))
+        dropped = apply_trial_dropout(raw.data, raw.events, config.processing, fresh_rng(rng))
+        cropped = apply_cropping(dropped.data, config.processing, fresh_rng(rng), raw.params.sampling_rate)
+        sorted = sort_by_patterns(cropped.data, dropped.events, patterns_with_no_class, fresh_rng(rng))
         processed = process_images(sorted, config.processing)
         normalized = apply_zscore(processed.images, config.processing)
         variants = create_variants(normalized, patterns_with_no_class)
@@ -317,8 +321,6 @@ function generate_erp_images(n_per_pattern::Int;
         n_classes = length(patterns) * VARIANT_COUNT
         total = n_classes * n_per_pattern
 
-        base_seed = time_ns()
-        rngs = [Random.Xoshiro(UInt(base_seed) + UInt64(i) * 0x9E3779B97F4A7C15) for i in 1:n_threads]
         results_per_thread = [Vector{Tuple}() for _ in 1:n_threads]
 
         progress_counter = config.runtime.show_progress && config.runtime.progress_every > 0 ?
@@ -329,10 +331,9 @@ function generate_erp_images(n_per_pattern::Int;
         chunk_size = cld(n_per_pattern, n_threads)
 
         function process_chunk!(chunk_id::Int, start_idx::Int, end_idx::Int)
-            rng = rngs[chunk_id]
             local_results = results_per_thread[chunk_id]
             for _ in start_idx:end_idx
-                result = run_pipeline(config, rng, patterns)
+                result = run_pipeline(config, fresh_rng(), patterns)
                 push!(local_results, result)
 
                 if progress_counter !== nothing

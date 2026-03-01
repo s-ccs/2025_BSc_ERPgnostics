@@ -15,7 +15,7 @@ end
 # Simulate a time-varying component with explicit RNG.
 function UnfoldSim.simulate_component(rng, c::TimeVaryingComponent, design::AbstractDesign)
     return maybe_diag(:simulate_component_rng) do
-        evts = generate_events(deepcopy(rng), design)
+        evts = generate_events(fresh_rng(rng), design)
         data = if applicable(c.basisfunction, evts, c.maxlength)
             c.beta .* c.basisfunction(evts, c.maxlength)
         else
@@ -26,7 +26,7 @@ function UnfoldSim.simulate_component(rng, c::TimeVaryingComponent, design::Abst
 end
 
 # Simulate a time-varying component with default RNG.
-function UnfoldSim.simulate_component(c::TimeVaryingComponent, design::AbstractDesign; rng = MersenneTwister(time_ns()))
+function UnfoldSim.simulate_component(c::TimeVaryingComponent, design::AbstractDesign; rng = fresh_rng())
     return maybe_diag(:simulate_component_default) do
         return UnfoldSim.simulate_component(rng, c, design)
     end
@@ -92,6 +92,8 @@ const PATTERN_CATEGORICALS = Dict{Symbol, Symbol}(
 )
 
 const SORTERS = Dict{Symbol, Function}(
+    # Use latency as a secondary key so the sigmoid order stays stable instead of
+    # collapsing into near-random stripes when many Δlatency values are similar.
     :sigmoid => evts -> collect(zip(evts[!, DELTA_LATENCY], evts.latency)),
     :one_sided_fan => evts -> evts.one_sided_fan_duration,
     :two_sided_fan => evts -> evts.two_sided_fan_duration,
@@ -121,7 +123,7 @@ end
     return maybe_diag(:pattern_sort_values) do
         if pname === :no_class
             # Randomize no_class trial order explicitly at the source.
-            return rand(rng, size(evts, 1))
+            return rand(fresh_rng(rng), size(evts, 1))
         end
         return SORTERS[pname](evts)
     end

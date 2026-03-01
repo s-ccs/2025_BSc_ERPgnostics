@@ -87,6 +87,7 @@ const DEFAULT_PATTERN_LIST = [:sigmoid, :one_sided_fan, :two_sided_fan, :divergi
 
 Base.@kwdef struct PatternConfig
     patterns::Vector{Symbol} = DEFAULT_PATTERN_LIST
+    loaded_patterns::Vector{Symbol} = DEFAULT_PATTERN_LIST
     covariate_dists::Dict{Symbol, Distribution} = default_pattern_covariates()
     diverging_bar_levels::Vector{String} = ["car", "face"]
 end
@@ -143,9 +144,10 @@ function UnfoldSim.generate_events(rng::UnfoldSim.AbstractRNG, design::Covariate
             return design.events_cache
         end
 
+        covariate_rng = fresh_rng(rng)
         all_evts = Pair{Symbol, Any}[]
         for (covariate, dist) in design.covariates
-            push!(all_evts, covariate => rand(rng, dist, design.n_trials))
+            push!(all_evts, covariate => rand(covariate_rng, dist, design.n_trials))
         end
 
         if design.design === nothing
@@ -163,7 +165,7 @@ function UnfoldSim.generate_events(rng::UnfoldSim.AbstractRNG, design::Covariate
             error("design.n_trials need to be divisible by size(design.design)")
         end
 
-        categorical_events = generate_events(deepcopy(rng), RepeatDesign(design.design, Int(n_rep)))
+        categorical_events = generate_events(fresh_rng(rng), RepeatDesign(design.design, Int(n_rep)))
         if isempty(all_evts)
             design.events_cache = categorical_events
             return design.events_cache
