@@ -26,6 +26,7 @@ export CLASS_NAMES
 export instance_output_summary_df
 export instance_neuron_breakdown_df
 export instance_neuron_summary_df
+export instance_penultimate_layer_df
 export instance_vector_overview_df
 export last_layer_overview_df
 export model_architecture_trace_df
@@ -799,6 +800,34 @@ function instance_neuron_summary_df(run, val_row::Int)
         ],
         softmax_probability = Float64.(probs),
     )
+end
+
+function instance_penultimate_layer_df(
+    run,
+    val_row::Int;
+    sort_by::Symbol = :neuron_idx,
+    top_k::Union{Nothing, Int} = nothing,
+)
+    @assert 1 <= val_row <= nrow(run.predictions) "val_row out of range"
+
+    pooled = vec(run.pooled_features[:, val_row])
+    out = DataFrame(
+        neuron_idx = collect(1:length(pooled)),
+        activation_value = Float64.(pooled),
+    )
+    out.abs_activation_value = abs.(out.activation_value)
+    out.activation_sign = ifelse.(out.activation_value .>= 0, "positive", "negative")
+
+    if sort_by != :neuron_idx
+        @assert sort_by in propertynames(out) "sort_by not found: $(sort_by)"
+        sort!(out, sort_by, rev = true)
+    end
+
+    if !isnothing(top_k)
+        out = first(out, min(top_k, nrow(out)))
+    end
+
+    return out
 end
 
 function instance_neuron_breakdown_df(
