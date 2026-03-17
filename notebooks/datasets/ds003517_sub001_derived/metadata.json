@@ -1,0 +1,84 @@
+{
+  "source_dataset": "ds003517",
+  "source_dataset_doi": "10.18112/openneuro.ds003517.v1.1.0",
+  "source_paper_doi": "10.1016/j.neuroimage.2016.02.075",
+  "subject": "sub-001",
+  "selected_trial_types": [
+    "ODDBALL STANDARD",
+    "ODDBALL RARE",
+    "GAMBLING WIN",
+    "GAMBLING LOSS",
+    "SHOOT_BUTTON",
+    "COLLECT_STAR",
+    "MISSILE_HIT_ENEMY",
+    "PLAYER_CRASH_WALL",
+    "PLAYER_CRASH_ENEMY",
+    "COLLECT_AMMO"
+  ],
+  "tmin_s": -0.5,
+  "tmax_s": 0.498,
+  "baseline_s": [
+    -0.2,
+    0.0
+  ],
+  "bandpass_hz": [
+    0.1,
+    20.0
+  ],
+  "sfreq_hz": 500.0,
+  "n_trials": 4125,
+  "n_channels": 63,
+  "n_timepoints": 500,
+  "trial_type_counts": [
+    {
+      "run": 1,
+      "trial_type": "GAMBLING LOSS",
+      "count": 17
+    },
+    {
+      "run": 1,
+      "trial_type": "GAMBLING WIN",
+      "count": 18
+    },
+    {
+      "run": 1,
+      "trial_type": "ODDBALL RARE",
+      "count": 41
+    },
+    {
+      "run": 1,
+      "trial_type": "ODDBALL STANDARD",
+      "count": 159
+    },
+    {
+      "run": 2,
+      "trial_type": "COLLECT_AMMO",
+      "count": 117
+    },
+    {
+      "run": 2,
+      "trial_type": "COLLECT_STAR",
+      "count": 1228
+    },
+    {
+      "run": 2,
+      "trial_type": "MISSILE_HIT_ENEMY",
+      "count": 766
+    },
+    {
+      "run": 2,
+      "trial_type": "PLAYER_CRASH_ENEMY",
+      "count": 150
+    },
+    {
+      "run": 2,
+      "trial_type": "PLAYER_CRASH_WALL",
+      "count": 247
+    },
+    {
+      "run": 2,
+      "trial_type": "SHOOT_BUTTON",
+      "count": 1382
+    }
+  ]
+}
