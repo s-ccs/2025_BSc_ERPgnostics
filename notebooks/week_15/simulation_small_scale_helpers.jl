@@ -45,6 +45,7 @@ export plot_lowpass_effect
 export plot_example_images
 export build_ranked_settings_table
 export run_dense_nn_lowpass_search
+export run_dense_nn_lowpass_direct_search
 export build_confusion_example_bundle
 export plot_confusion_examples
 
@@ -136,7 +137,7 @@ function make_base_config(; target_size::Tuple{Int, Int} = CALIBRATION_TARGET_SI
     )
 
     runtime = ERPGen.RuntimeConfig(
-        threaded = false,
+        threaded = true,
         show_progress = true,
         blas_threads = 1,
         progress_every = 50,
@@ -550,6 +551,11 @@ function parameterized_config(base_cfg::ERPGen.GenerationConfig;
         componentA_amp_dist::Distribution = base_cfg.components.componentA_amp_dist,
         componentB_amp_dist::Distribution = base_cfg.components.componentB_amp_dist,
         componentC_amp_dist::Distribution = base_cfg.components.componentC_amp_dist,
+        tilted_bar_hanning_length_dist::Distribution = base_cfg.components.tilted_bar_hanning_length_dist,
+        one_sided_fan_duration_divisor_dist::Distribution = base_cfg.components.one_sided_fan_duration_divisor_dist,
+        one_sided_fan_log_mu_offset_dist::Distribution = base_cfg.components.one_sided_fan_log_mu_offset_dist,
+        one_sided_fan_log_sigma_dist::Distribution = base_cfg.components.one_sided_fan_log_sigma_dist,
+        one_sided_fan_support_max_dist::Distribution = base_cfg.components.one_sided_fan_support_max_dist,
         pink_noise_dist::Distribution = base_cfg.noise.noiselevel_dists[ERPGen.PinkNoise],
         white_noise_dist::Distribution = base_cfg.noise.noiselevel_dists[ERPGen.WhiteNoise],
         red_noise_dist::Distribution = base_cfg.noise.noiselevel_dists[ERPGen.RedNoise],
@@ -577,6 +583,11 @@ function parameterized_config(base_cfg::ERPGen.GenerationConfig;
         componentA_amp_dist = componentA_amp_dist,
         componentB_amp_dist = componentB_amp_dist,
         componentC_amp_dist = componentC_amp_dist,
+        tilted_bar_hanning_length_dist = tilted_bar_hanning_length_dist,
+        one_sided_fan_duration_divisor_dist = one_sided_fan_duration_divisor_dist,
+        one_sided_fan_log_mu_offset_dist = one_sided_fan_log_mu_offset_dist,
+        one_sided_fan_log_sigma_dist = one_sided_fan_log_sigma_dist,
+        one_sided_fan_support_max_dist = one_sided_fan_support_max_dist,
     )
 
     noiselevel_dists = Dict{DataType, Distribution}(
@@ -633,6 +644,11 @@ function parameter_specs(base_cfg::ERPGen.GenerationConfig)
         parameter_spec(:componentA_amp, "components.componentA_amp_dist", base_cfg.components.componentA_amp_dist, 0.50, 2.00),
         parameter_spec(:componentB_amp, "components.componentB_amp_dist", base_cfg.components.componentB_amp_dist, 0.50, 2.00),
         parameter_spec(:componentC_amp, "components.componentC_amp_dist", base_cfg.components.componentC_amp_dist, 0.50, 2.00),
+        parameter_spec(:tilted_bar_hanning_length, "components.tilted_bar_hanning_length_dist", base_cfg.components.tilted_bar_hanning_length_dist, 0.50, 2.00; min_mean = 2.0),
+        parameter_spec(:one_sided_fan_duration_divisor, "components.one_sided_fan_duration_divisor_dist", base_cfg.components.one_sided_fan_duration_divisor_dist, 0.50, 2.00; min_mean = 0.01),
+        parameter_spec(:one_sided_fan_log_mu_offset, "components.one_sided_fan_log_mu_offset_dist", base_cfg.components.one_sided_fan_log_mu_offset_dist, 0.40, 2.50; min_mean = 0.001),
+        parameter_spec(:one_sided_fan_log_sigma, "components.one_sided_fan_log_sigma_dist", base_cfg.components.one_sided_fan_log_sigma_dist, 0.40, 2.00; min_mean = 0.01),
+        parameter_spec(:one_sided_fan_support_max, "components.one_sided_fan_support_max_dist", base_cfg.components.one_sided_fan_support_max_dist, 0.50, 2.00; min_mean = 0.01),
         parameter_spec(:noise_pink, "noise.noiselevel_dists[PinkNoise]", base_cfg.noise.noiselevel_dists[ERPGen.PinkNoise], 0.30, 2.50; min_mean = 0.01),
         parameter_spec(:noise_white, "noise.noiselevel_dists[WhiteNoise]", base_cfg.noise.noiselevel_dists[ERPGen.WhiteNoise], 0.30, 2.50; min_mean = 0.01),
         parameter_spec(:noise_red, "noise.noiselevel_dists[RedNoise]", base_cfg.noise.noiselevel_dists[ERPGen.RedNoise], 0.30, 2.50; min_mean = 0.01),
@@ -679,6 +695,11 @@ function build_cfg_from_params(base_cfg::ERPGen.GenerationConfig, params::Abstra
         componentA_amp_dist = dists[:componentA_amp],
         componentB_amp_dist = dists[:componentB_amp],
         componentC_amp_dist = dists[:componentC_amp],
+        tilted_bar_hanning_length_dist = dists[:tilted_bar_hanning_length],
+        one_sided_fan_duration_divisor_dist = dists[:one_sided_fan_duration_divisor],
+        one_sided_fan_log_mu_offset_dist = dists[:one_sided_fan_log_mu_offset],
+        one_sided_fan_log_sigma_dist = dists[:one_sided_fan_log_sigma],
+        one_sided_fan_support_max_dist = dists[:one_sided_fan_support_max],
         pink_noise_dist = dists[:noise_pink],
         white_noise_dist = dists[:noise_white],
         red_noise_dist = dists[:noise_red],
@@ -816,6 +837,11 @@ function config_distribution_map(cfg::ERPGen.GenerationConfig)
         :componentA_amp => cfg.components.componentA_amp_dist,
         :componentB_amp => cfg.components.componentB_amp_dist,
         :componentC_amp => cfg.components.componentC_amp_dist,
+        :tilted_bar_hanning_length => cfg.components.tilted_bar_hanning_length_dist,
+        :one_sided_fan_duration_divisor => cfg.components.one_sided_fan_duration_divisor_dist,
+        :one_sided_fan_log_mu_offset => cfg.components.one_sided_fan_log_mu_offset_dist,
+        :one_sided_fan_log_sigma => cfg.components.one_sided_fan_log_sigma_dist,
+        :one_sided_fan_support_max => cfg.components.one_sided_fan_support_max_dist,
         :noise_pink => cfg.noise.noiselevel_dists[ERPGen.PinkNoise],
         :noise_white => cfg.noise.noiselevel_dists[ERPGen.WhiteNoise],
         :noise_red => cfg.noise.noiselevel_dists[ERPGen.RedNoise],
@@ -1626,24 +1652,27 @@ end
 function build_dense_nn_search_candidate_specs(method::Symbol, seed_specs, base_cfg::ERPGen.GenerationConfig;
         n_candidates::Int,
         local_range_scale::Float64 = 0.25,
-        seed::Int = Int(time_ns()))
+        seed::Int = Int(time_ns()),
+        include_seed_configs::Bool = true)
     rng = Random.Xoshiro(seed)
     global_ranges = parameter_ranges(base_cfg)
     candidate_specs = NamedTuple[]
 
-    for seed_spec in seed_specs
-        push!(candidate_specs, (
-            candidate_source = "seed_config",
-            seed_label = seed_spec.seed_label,
-            seed_origin = seed_spec.seed_origin,
-            source_strategy = seed_spec.source_strategy,
-            source_setting_rank = seed_spec.source_setting_rank,
-            is_seed_config = true,
-            cfg = seed_spec.cfg,
-        ))
+    if include_seed_configs
+        for seed_spec in seed_specs
+            push!(candidate_specs, (
+                candidate_source = "seed_config",
+                seed_label = seed_spec.seed_label,
+                seed_origin = seed_spec.seed_origin,
+                source_strategy = seed_spec.source_strategy,
+                source_setting_rank = seed_spec.source_setting_rank,
+                is_seed_config = true,
+                cfg = seed_spec.cfg,
+            ))
+        end
     end
 
-    extra_candidates = max(n_candidates - length(candidate_specs), 0)
+    extra_candidates = max(n_candidates - length(seed_specs), 0)
     extra_candidates == 0 && return candidate_specs
 
     if method == :broad_random
@@ -1690,6 +1719,43 @@ function build_dense_nn_search_candidate_specs(method::Symbol, seed_specs, base_
     end
 
     return candidate_specs
+end
+
+function dense_nn_result_row(candidate_spec, metrics, target_size::Tuple{Int, Int}, lowpass::Bool, base_cfg::ERPGen.GenerationConfig;
+        search_method::AbstractString,
+        candidate_index::Int,
+        method_rank = missing,
+        n_per_pattern::Int)
+    row_pairs = Pair{Symbol, Any}[
+        :search_method => String(search_method),
+        :resolution => resolution_label(target_size),
+        :lowpass => lowpass,
+        :candidate_index => candidate_index,
+        :candidate_source => candidate_spec.candidate_source,
+        :seed_label => candidate_spec.seed_label,
+        :seed_origin => candidate_spec.seed_origin,
+        :source_strategy => candidate_spec.source_strategy,
+        :source_setting_rank => candidate_spec.source_setting_rank,
+        :is_seed_config => candidate_spec.is_seed_config,
+        :n_per_pattern => n_per_pattern,
+        :eval_repeats => metrics.eval_repeats,
+        :mean_balanced_accuracy => metrics.mean_balanced_accuracy,
+        :std_balanced_accuracy => metrics.std_balanced_accuracy,
+        :mean_macro_f1 => metrics.mean_macro_f1,
+        :std_macro_f1 => metrics.std_macro_f1,
+        :mean_recall_no_class => metrics.mean_recall_no_class,
+        :mean_recall_sigmoid => metrics.mean_recall_sigmoid,
+        :mean_sim_balanced_accuracy => metrics.mean_sim_balanced_accuracy,
+        :mean_sim_macro_f1 => metrics.mean_sim_macro_f1,
+        :mean_sim_recall_no_class => metrics.mean_sim_recall_no_class,
+        :mean_sim_recall_sigmoid => metrics.mean_sim_recall_sigmoid,
+        :mean_train_time_s => metrics.mean_train_time_s,
+        :n_train => metrics.n_train,
+        :n_real => metrics.n_real,
+        :method_rank => method_rank,
+    ]
+    append!(row_pairs, pairs(config_parameter_namedtuple(base_cfg, candidate_spec.cfg)))
+    return (; row_pairs...)
 end
 
 function evaluate_dense_nn_search_candidate(cfg::ERPGen.GenerationConfig, real_ds;
@@ -1778,6 +1844,209 @@ function evaluate_dense_nn_search_candidate(cfg::ERPGen.GenerationConfig, real_d
     )
 end
 
+function dense_nn_base_candidate_spec(base_cfg::ERPGen.GenerationConfig)
+    return (
+        candidate_source = "baseline",
+        seed_label = "base_cfg",
+        seed_origin = "baseline",
+        source_strategy = "base_cfg",
+        source_setting_rank = 0,
+        is_seed_config = true,
+        cfg = base_cfg,
+    )
+end
+
+function build_dense_nn_method_candidate_specs(method::Symbol, base_cfg::ERPGen.GenerationConfig;
+        n_candidates::Int,
+        local_range_scale::Float64 = 0.25,
+        seed::Int = Int(time_ns()))
+    rng = Random.Xoshiro(seed)
+    global_ranges = parameter_ranges(base_cfg)
+    candidate_specs = NamedTuple[]
+    n_candidates = max(n_candidates, 0)
+    n_candidates == 0 && return candidate_specs
+
+    if method == :broad_random
+        for _ in 1:n_candidates
+            cfg = build_cfg_from_params(base_cfg, sample_param_vector(rng, global_ranges))
+            push!(candidate_specs, (
+                candidate_source = "global_random",
+                seed_label = "base_cfg",
+                seed_origin = "baseline",
+                source_strategy = "base_cfg",
+                source_setting_rank = 0,
+                is_seed_config = false,
+                cfg = cfg,
+            ))
+        end
+    elseif method == :latin_hypercube || method == :monte_carlo
+        center_params = parameter_vector_from_cfg(base_cfg, base_cfg)
+        local_ranges = centered_parameter_ranges(center_params, global_ranges; local_range_scale = local_range_scale)
+        param_vectors = if method == :latin_hypercube
+            lhs_param_vectors(local_ranges, n_candidates, rng)
+        else
+            [sample_param_vector(rng, local_ranges) for _ in 1:n_candidates]
+        end
+
+        for params in param_vectors
+            cfg = build_cfg_from_params(base_cfg, params)
+            push!(candidate_specs, (
+                candidate_source = method == :latin_hypercube ? "lhs_local_base" : "mc_local_base",
+                seed_label = "base_cfg",
+                seed_origin = "baseline",
+                source_strategy = "base_cfg",
+                source_setting_rank = 0,
+                is_seed_config = false,
+                cfg = cfg,
+            ))
+        end
+    else
+        error("Unknown dense NN search method: $(method)")
+    end
+
+    return candidate_specs
+end
+
+function run_dense_nn_lowpass_direct_search(;
+        target_size::Tuple{Int, Int} = (16, 16),
+        lowpass::Bool = true,
+        method_candidates = Dict(:broad_random => 12, :latin_hypercube => 12, :monte_carlo => 12),
+        n_per_pattern::Int = 256,
+        eval_repeats::Int = 1,
+        local_range_scale::Float64 = 0.25,
+        nn_batch_size::Int = 32,
+        nn_epochs::Int = 30,
+        nn_lr::Float32 = 1f-3,
+        post_stim_only::Bool = true,
+        seed::Int = Int(time_ns()))
+    lowpass || error("This workflow is intended for lowpass = true.")
+
+    real_bundle = load_real_condition_cache(;
+        target_sizes = [target_size],
+        lowpass_choices = (lowpass,),
+        post_stim_only = post_stim_only,
+    )
+    key = condition_key(target_size, lowpass)
+    @assert haskey(real_bundle.cache, key) "Target size $(target_size) with lowpass=$(lowpass) not found in real_bundle.cache."
+
+    base_cfg = make_base_config(target_size = target_size, apply_lowpass = lowpass)
+    real_ds = real_bundle.cache[key]
+    methods = [:broad_random, :latin_hypercube, :monte_carlo]
+
+    baseline_spec = dense_nn_base_candidate_spec(base_cfg)
+    println("\nDense NN low-pass direct search | baseline=$(baseline_spec.seed_label)")
+    baseline_metrics = evaluate_dense_nn_search_candidate(
+        baseline_spec.cfg,
+        real_ds;
+        target_size = target_size,
+        lowpass = lowpass,
+        n_per_pattern = n_per_pattern,
+        eval_repeats = eval_repeats,
+        nn_batch_size = nn_batch_size,
+        nn_epochs = nn_epochs,
+        nn_lr = nn_lr,
+        seed = seed + 500_000_000,
+    )
+    baseline_row = dense_nn_result_row(
+        baseline_spec,
+        baseline_metrics,
+        target_size,
+        lowpass,
+        base_cfg;
+        search_method = "baseline",
+        candidate_index = 1,
+        method_rank = 1,
+        n_per_pattern = n_per_pattern,
+    )
+    baseline_results_df = DataFrame([baseline_row])
+
+    results_rows = NamedTuple[]
+    method_offset = 0
+    for method in methods
+        requested_candidates = Int(get(method_candidates, method, 0))
+        requested_candidates = max(requested_candidates, 0)
+        println("\nDense NN low-pass direct search | method=$(method) | target=$(resolution_label(target_size)) | candidates=$(requested_candidates)")
+
+        candidate_specs = build_dense_nn_method_candidate_specs(
+            method,
+            base_cfg;
+            n_candidates = requested_candidates,
+            local_range_scale = local_range_scale,
+            seed = seed + method_offset,
+        )
+
+        for (candidate_idx, candidate_spec) in enumerate(candidate_specs)
+            println("  evaluating candidate $(candidate_idx)/$(length(candidate_specs)) | source=$(candidate_spec.candidate_source)")
+            metrics = evaluate_dense_nn_search_candidate(
+                candidate_spec.cfg,
+                real_ds;
+                target_size = target_size,
+                lowpass = lowpass,
+                n_per_pattern = n_per_pattern,
+                eval_repeats = eval_repeats,
+                nn_batch_size = nn_batch_size,
+                nn_epochs = nn_epochs,
+                nn_lr = nn_lr,
+                seed = seed + method_offset + 1_000 * candidate_idx,
+            )
+            push!(results_rows, dense_nn_result_row(
+                candidate_spec,
+                metrics,
+                target_size,
+                lowpass,
+                base_cfg;
+                search_method = String(method),
+                candidate_index = candidate_idx,
+                n_per_pattern = n_per_pattern,
+            ))
+        end
+
+        method_offset += 1_000_000
+    end
+
+    results_df = DataFrame(results_rows)
+    if nrow(results_df) > 0
+        sort!(results_df, [:search_method, :mean_balanced_accuracy, :mean_macro_f1, :std_balanced_accuracy];
+            rev = [false, true, true, false])
+        for group in groupby(results_df, :search_method)
+            group.method_rank = collect(1:nrow(group))
+        end
+        summary_df = combine(
+            groupby(results_df, :search_method),
+            :mean_balanced_accuracy => maximum => :best_balanced_accuracy,
+            :mean_macro_f1 => maximum => :best_macro_f1,
+            :candidate_index => length => :n_evaluated,
+        )
+        sort!(summary_df, :best_balanced_accuracy, rev = true)
+    else
+        summary_df = DataFrame(
+            search_method = String[],
+            best_balanced_accuracy = Float64[],
+            best_macro_f1 = Float64[],
+            n_evaluated = Int[],
+        )
+    end
+
+    all_results_df = nrow(results_df) == 0 ?
+        copy(baseline_results_df) :
+        vcat(baseline_results_df, results_df; cols = :union)
+
+    return (
+        baseline_results_df = baseline_results_df,
+        results_df = results_df,
+        all_results_df = all_results_df,
+        summary_df = summary_df,
+        base_cfg = base_cfg,
+        real_bundle = real_bundle,
+        target_size = target_size,
+        lowpass = lowpass,
+        n_per_pattern = n_per_pattern,
+        eval_repeats = eval_repeats,
+        method_candidates = method_candidates,
+        local_range_scale = local_range_scale,
+    )
+end
+
 function run_dense_nn_lowpass_search(experiment;
         target_size::Tuple{Int, Int} = (16, 16),
         lowpass::Bool = true,
@@ -1810,13 +2079,51 @@ function run_dense_nn_lowpass_search(experiment;
     seed_specs = build_dense_nn_seed_specs(base_cfg, previous_seed_settings_df)
 
     methods = [:broad_random, :latin_hypercube, :monte_carlo]
+    seed_rows = NamedTuple[]
     results_rows = NamedTuple[]
     method_offset = 0
+
+    println("\nDense NN low-pass search | shared seed configs=$(length(seed_specs))")
+    for (seed_idx, seed_spec) in enumerate(seed_specs)
+        candidate_spec = (
+            candidate_source = "seed_config",
+            seed_label = seed_spec.seed_label,
+            seed_origin = seed_spec.seed_origin,
+            source_strategy = seed_spec.source_strategy,
+            source_setting_rank = seed_spec.source_setting_rank,
+            is_seed_config = true,
+            cfg = seed_spec.cfg,
+        )
+        println("  evaluating shared seed $(seed_idx)/$(length(seed_specs)) | seed=$(candidate_spec.seed_label)")
+        metrics = evaluate_dense_nn_search_candidate(
+            candidate_spec.cfg,
+            real_ds;
+            target_size = target_size,
+            lowpass = lowpass,
+            n_per_pattern = n_per_pattern,
+            eval_repeats = eval_repeats,
+            nn_batch_size = nn_batch_size,
+            nn_epochs = nn_epochs,
+            nn_lr = nn_lr,
+            seed = seed + 500_000_000 + 1_000 * seed_idx,
+        )
+        push!(seed_rows, dense_nn_result_row(
+            candidate_spec,
+            metrics,
+            target_size,
+            lowpass,
+            base_cfg;
+            search_method = "seed_pool",
+            candidate_index = seed_idx,
+            n_per_pattern = n_per_pattern,
+        ))
+    end
 
     for method in methods
         requested_candidates = Int(get(method_candidates, method, length(seed_specs)))
         requested_candidates = max(requested_candidates, length(seed_specs))
-        println("\nDense NN low-pass search | method=$(method) | target=$(resolution_label(target_size)) | candidates=$(requested_candidates)")
+        extra_candidates = max(requested_candidates - length(seed_specs), 0)
+        println("\nDense NN low-pass search | method=$(method) | target=$(resolution_label(target_size)) | new_candidates=$(extra_candidates) | shared_seeds=$(length(seed_specs))")
 
         candidate_specs = build_dense_nn_search_candidate_specs(
             method,
@@ -1825,6 +2132,7 @@ function run_dense_nn_lowpass_search(experiment;
             n_candidates = requested_candidates,
             local_range_scale = local_range_scale,
             seed = seed + method_offset,
+            include_seed_configs = false,
         )
 
         for (candidate_idx, candidate_spec) in enumerate(candidate_specs)
@@ -1841,48 +2149,34 @@ function run_dense_nn_lowpass_search(experiment;
                 nn_lr = nn_lr,
                 seed = seed + method_offset + 1_000 * candidate_idx,
             )
-
-            row_pairs = Pair{Symbol, Any}[
-                :search_method => String(method),
-                :resolution => resolution_label(target_size),
-                :lowpass => lowpass,
-                :candidate_index => candidate_idx,
-                :candidate_source => candidate_spec.candidate_source,
-                :seed_label => candidate_spec.seed_label,
-                :seed_origin => candidate_spec.seed_origin,
-                :source_strategy => candidate_spec.source_strategy,
-                :source_setting_rank => candidate_spec.source_setting_rank,
-                :is_seed_config => candidate_spec.is_seed_config,
-                :n_per_pattern => n_per_pattern,
-                :eval_repeats => metrics.eval_repeats,
-                :mean_balanced_accuracy => metrics.mean_balanced_accuracy,
-                :std_balanced_accuracy => metrics.std_balanced_accuracy,
-                :mean_macro_f1 => metrics.mean_macro_f1,
-                :std_macro_f1 => metrics.std_macro_f1,
-                :mean_recall_no_class => metrics.mean_recall_no_class,
-                :mean_recall_sigmoid => metrics.mean_recall_sigmoid,
-                :mean_sim_balanced_accuracy => metrics.mean_sim_balanced_accuracy,
-                :mean_sim_macro_f1 => metrics.mean_sim_macro_f1,
-                :mean_sim_recall_no_class => metrics.mean_sim_recall_no_class,
-                :mean_sim_recall_sigmoid => metrics.mean_sim_recall_sigmoid,
-                :mean_train_time_s => metrics.mean_train_time_s,
-                :n_train => metrics.n_train,
-                :n_real => metrics.n_real,
-            ]
-            append!(row_pairs, pairs(config_parameter_namedtuple(base_cfg, candidate_spec.cfg)))
-            push!(results_rows, (; row_pairs...))
+            push!(results_rows, dense_nn_result_row(
+                candidate_spec,
+                metrics,
+                target_size,
+                lowpass,
+                base_cfg;
+                search_method = String(method),
+                candidate_index = candidate_idx,
+                n_per_pattern = n_per_pattern,
+            ))
         end
 
         method_offset += 1_000_000
     end
 
+    seed_results_df = DataFrame(seed_rows)
+    sort!(seed_results_df, [:mean_balanced_accuracy, :mean_macro_f1, :std_balanced_accuracy];
+        rev = [true, true, false])
+    seed_results_df.method_rank = collect(1:nrow(seed_results_df))
+
     results_df = DataFrame(results_rows)
     sort!(results_df, [:search_method, :mean_balanced_accuracy, :mean_macro_f1, :std_balanced_accuracy];
         rev = [false, true, true, false])
-    results_df.method_rank = zeros(Int, nrow(results_df))
     for group in groupby(results_df, :search_method)
         group.method_rank = collect(1:nrow(group))
     end
+
+    all_results_df = vcat(seed_results_df, results_df; cols = :union)
 
     summary_df = combine(
         groupby(results_df, :search_method),
@@ -1894,6 +2188,8 @@ function run_dense_nn_lowpass_search(experiment;
 
     return (
         results_df = results_df,
+        seed_results_df = seed_results_df,
+        all_results_df = all_results_df,
         summary_df = summary_df,
         previous_seed_settings_df = previous_seed_settings_df,
         seed_specs = seed_specs,

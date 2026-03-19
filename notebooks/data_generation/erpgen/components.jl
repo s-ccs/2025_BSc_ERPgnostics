@@ -15,7 +15,7 @@ end
 # Simulate a time-varying component with explicit RNG.
 function UnfoldSim.simulate_component(rng, c::TimeVaryingComponent, design::AbstractDesign)
     return maybe_diag(:simulate_component_rng) do
-        evts = generate_events(fresh_rng(rng), design)
+        evts = generate_events(fresh_rng(), design)
         data = if applicable(c.basisfunction, evts, c.maxlength)
             c.beta .* c.basisfunction(evts, c.maxlength)
         else
@@ -33,20 +33,29 @@ function UnfoldSim.simulate_component(c::TimeVaryingComponent, design::AbstractD
 end
 
 # Generate a linear ERP basis (tilted bar).
-function basis_tilted_bar(evts)
+function basis_tilted_bar(evts; window_length::Real = 50)
     return maybe_diag(:basis_tilted_bar) do
+        safe_window_length = max(2, round(Int, window_length))
         shifts = -round.(Int, evts.tilted_bar_duration)
-        basis = pad_array.(Ref(UnfoldSim.DSP.hanning(50)), shifts, 0)
+        basis = pad_array.(Ref(UnfoldSim.DSP.hanning(safe_window_length)), shifts, 0)
         return basis
     end
 end
 
 # Generate a lognormal ERP basis (one-sided fan).
-function basis_one_sided_fan(evts, maxlength)
+function basis_one_sided_fan(evts, maxlength;
+        duration_divisor::Real = 40.0,
+        log_mu_offset::Real = 0.2,
+        log_sigma::Real = 1.0,
+        support_max::Real = 10.0)
     return maybe_diag(:basis_one_sided_fan) do
-        basis = pdf.(LogNormal.(evts.one_sided_fan_duration ./ 40 .- 0.2, 1),
-            Ref(range(0, 10, length = maxlength)))
-        basis = basis ./ maximum.(basis)
+        safe_duration_divisor = max(sqrt(eps(Float64)), Float64(duration_divisor))
+        safe_log_sigma = max(sqrt(eps(Float64)), Float64(log_sigma))
+        safe_support_max = max(sqrt(eps(Float64)), Float64(support_max))
+        basis = pdf.(LogNormal.(evts.one_sided_fan_duration ./ safe_duration_divisor .- log_mu_offset, safe_log_sigma),
+            Ref(range(0, safe_support_max, length = maxlength)))
+        basis_max = max.(maximum.(basis), eps(Float64))
+        basis = basis ./ basis_max
         return basis
     end
 end
@@ -123,7 +132,7 @@ end
     return maybe_diag(:pattern_sort_values) do
         if pname === :no_class
             # Randomize no_class trial order explicitly at the source.
-            return rand(fresh_rng(rng), size(evts, 1))
+            return time_seeded_rand(size(evts, 1))
         end
         return SORTERS[pname](evts)
     end

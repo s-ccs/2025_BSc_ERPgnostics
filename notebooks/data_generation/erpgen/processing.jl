@@ -44,9 +44,8 @@ function crop_time_window(data_time_trials::AbstractMatrix, rng::AbstractRNG, cr
             return data_time_trials, (crop_start_ms = 0, crop_end_ms = 0, crop_start_samples = 0, crop_end_samples = 0)
         end
 
-        crop_rng = fresh_rng(rng)
-        start_ms = Int(round(max(0, rand(crop_rng, crop_start_dist))))
-        end_ms = Int(round(max(0, rand(crop_rng, crop_end_dist))))
+        start_ms = Int(round(max(0, time_seeded_rand(crop_start_dist))))
+        end_ms = Int(round(max(0, time_seeded_rand(crop_end_dist))))
         start_samples = Int(round(start_ms * sampling_rate / 1000))
         end_samples = Int(round(end_ms * sampling_rate / 1000))
 
@@ -77,12 +76,11 @@ function apply_trial_dropout(data_time_trials::AbstractMatrix, rng::AbstractRNG,
             throw(ArgumentError("apply_trial_dropout received empty data; cannot proceed."))
         end
 
-        dropout_rng = fresh_rng(rng)
         drop_trials = clamp(Int(round(dropout_trials_rate)), 0, max(0, n_trials - 1))
 
         keep_trials = trues(n_trials)
         if drop_trials > 0
-            drop_idx = randperm(dropout_rng, n_trials)[1:drop_trials]
+            drop_idx = time_seeded_randperm(n_trials)[1:drop_trials]
             keep_trials[drop_idx] .= false
         end
 
@@ -115,8 +113,7 @@ function render_pattern_images!(images::AbstractVector{Matrix{Float32}},
         rng::AbstractRNG = fresh_rng())
     return maybe_diag(:render_pattern_images!) do
         # Sample concrete dropout counts once per simulation.
-        dropout_rng = fresh_rng(rng)
-        dropout_trials_rate = rand(dropout_rng, processing.dropout_trials_rate_dist)
+        dropout_trials_rate = time_seeded_rand(processing.dropout_trials_rate_dist)
         dropout_trials_rate = max(0, round(Int, dropout_trials_rate))
 
         # Render each pattern with its own sorting rule and metadata.
@@ -190,6 +187,9 @@ function render_pattern_images!(images::AbstractVector{Matrix{Float32}},
                     p1_beta = sim_result.p1_beta,
                     p3_beta = sim_result.p3_beta,
                     n1_betas = sim_result.n1_betas,
+                    componentA_amp = sim_result.component_amps.componentA_amp,
+                    componentB_amp = sim_result.component_amps.componentB_amp,
+                    componentC_amp = sim_result.component_amps.componentC_amp,
                     p100_width = sim_result.hanning_params.p100_width,
                     p100_window_center = sim_result.hanning_params.p100_window_center,
                     p100_offset = sim_result.hanning_params.p100_offset,
@@ -199,6 +199,11 @@ function render_pattern_images!(images::AbstractVector{Matrix{Float32}},
                     n170_width = sim_result.hanning_params.n170_width,
                     n170_window_center = sim_result.hanning_params.n170_window_center,
                     n170_offset = sim_result.hanning_params.n170_offset,
+                    tilted_bar_hanning_length = sim_result.basis_shape_params.tilted_bar_hanning_length,
+                    one_sided_fan_duration_divisor = sim_result.basis_shape_params.one_sided_fan_duration_divisor,
+                    one_sided_fan_log_mu_offset = sim_result.basis_shape_params.one_sided_fan_log_mu_offset,
+                    one_sided_fan_log_sigma = sim_result.basis_shape_params.one_sided_fan_log_sigma,
+                    one_sided_fan_support_max = sim_result.basis_shape_params.one_sided_fan_support_max,
                 )
             end
         end

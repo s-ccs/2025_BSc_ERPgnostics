@@ -74,15 +74,28 @@ const UNFOLDSIM_VERIFY_LOCK = ReentrantLock()
 const RNG_SEED_COUNTER = Threads.Atomic{UInt64}(0)
 const RNG_SEED_STRIDE = UInt64(0x9E3779B97F4A7C15)
 
-@inline function fresh_seed(rng::AbstractRNG = Random.default_rng())
+@inline function fresh_seed(_rng::AbstractRNG = Random.default_rng())
     tick = UInt64(time_ns())
     counter = Threads.atomic_add!(RNG_SEED_COUNTER, UInt64(1))
     mixed_counter = counter * RNG_SEED_STRIDE
-    entropy = rand(rng, UInt64)
-    return xor(xor(tick, mixed_counter), entropy)
+    return xor(tick, mixed_counter)
 end
 
 @inline fresh_rng(rng::AbstractRNG = Random.default_rng()) = Random.Xoshiro(fresh_seed(rng))
+
+# Use a fresh `time_ns()`-seeded RNG for every logical draw so parameter draws
+# do not reuse the same RNG state across multiple values.
+@inline time_seeded_rand() = rand(fresh_rng())
+@inline time_seeded_rand(sampler) = rand(fresh_rng(), sampler)
+
+function time_seeded_rand(sampler, dims::Integer...)
+    total = prod(dims)
+    values = [rand(fresh_rng(), sampler) for _ in 1:total]
+    return reshape(values, dims...)
+end
+
+@inline time_seeded_randperm(n::Integer) = randperm(fresh_rng(), n)
+@inline time_seeded_shuffle(x) = shuffle(fresh_rng(), x)
 
 # Return the installed UnfoldSim version (or nothing if not installed).
 function _installed_unfoldsim_version()

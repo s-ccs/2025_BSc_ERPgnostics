@@ -28,19 +28,18 @@ end
 # Stage 1: Simulate raw ERP data.
 function simulate_raw_erp(config::GenerationConfig, rng::AbstractRNG)
     return maybe_diag(:simulate_raw_erp) do
-        param_rng = fresh_rng(rng)
         simulate_rng = fresh_rng(rng)
         sim = config.sim
         comp = config.components
         pat = config.patterns
 
-        mu = max(1, rand(param_rng, sim.mu_dist))
-        sigma = max(0.01, rand(param_rng, sim.sigma_dist))
-        n_trials = Int(ceil(rand(param_rng, sim.n_trials_dist)))
+        mu = max(1, time_seeded_rand(sim.mu_dist))
+        sigma = max(0.01, time_seeded_rand(sim.sigma_dist))
+        n_trials = Int(ceil(time_seeded_rand(sim.n_trials_dist)))
         n_trials = max(100, n_trials)
         n_trials += isodd(n_trials) ? 1 : 0
-        sampling_rate = max(1, Int(round(rand(param_rng, sim.sampling_rate_dist))))
-        epoch_duration_s = rand(param_rng, sim.epoch_duration_dist)
+        sampling_rate = max(1, Int(round(time_seeded_rand(sim.sampling_rate_dist))))
+        epoch_duration_s = time_seeded_rand(sim.epoch_duration_dist)
         epoch_duration_s <= 0 && throw(ArgumentError("epoch_duration_s must be > 0"))
 
         sim_result = simulate_erp_trials(
@@ -49,6 +48,11 @@ function simulate_raw_erp(config::GenerationConfig, rng::AbstractRNG)
             comp.n170_width_dist, comp.p300_width_dist, comp.p1_beta_dist, comp.p3_beta_dist,
             comp.n1_beta1_dist, comp.n1_beta2_dist, comp.n1_beta3_dist,
             comp.componentA_amp_dist, comp.componentB_amp_dist, comp.componentC_amp_dist,
+            comp.tilted_bar_hanning_length_dist,
+            comp.one_sided_fan_duration_divisor_dist,
+            comp.one_sided_fan_log_mu_offset_dist,
+            comp.one_sided_fan_log_sigma_dist,
+            comp.one_sided_fan_support_max_dist,
             config.noise,
             pat.loaded_patterns, pat.covariate_dists, pat.diverging_bar_levels,
         )
@@ -67,6 +71,9 @@ function simulate_raw_erp(config::GenerationConfig, rng::AbstractRNG)
             p1_beta = sim_result.p1_beta,
             p3_beta = sim_result.p3_beta,
             n1_betas = sim_result.n1_betas,
+            componentA_amp = sim_result.component_amps.componentA_amp,
+            componentB_amp = sim_result.component_amps.componentB_amp,
+            componentC_amp = sim_result.component_amps.componentC_amp,
             p100_width = sim_result.hanning_params.p100_width,
             p100_window_center = sim_result.hanning_params.p100_window_center,
             p100_offset = sim_result.hanning_params.p100_offset,
@@ -78,6 +85,11 @@ function simulate_raw_erp(config::GenerationConfig, rng::AbstractRNG)
             p300_width = sim_result.hanning_params.p300_width,
             p300_window_center = sim_result.hanning_params.p300_window_center,
             p300_offset = sim_result.hanning_params.p300_offset,
+            tilted_bar_hanning_length = sim_result.basis_shape_params.tilted_bar_hanning_length,
+            one_sided_fan_duration_divisor = sim_result.basis_shape_params.one_sided_fan_duration_divisor,
+            one_sided_fan_log_mu_offset = sim_result.basis_shape_params.one_sided_fan_log_mu_offset,
+            one_sided_fan_log_sigma = sim_result.basis_shape_params.one_sided_fan_log_sigma,
+            one_sided_fan_support_max = sim_result.basis_shape_params.one_sided_fan_support_max,
         )
 
         return (data = sim_result.data, events = sim_result.events, params = params)
@@ -87,8 +99,7 @@ end
 # Stage 2: Apply trial dropout (before cropping).
 function apply_trial_dropout(data::AbstractMatrix, events, processing::ProcessingConfig, rng::AbstractRNG)
     return maybe_diag(:apply_trial_dropout) do
-        dropout_rng = fresh_rng(rng)
-        dropout_trials_rate = rand(dropout_rng, processing.dropout_trials_rate_dist)
+        dropout_trials_rate = time_seeded_rand(processing.dropout_trials_rate_dist)
         dropout_trials_rate = max(0, round(Int, dropout_trials_rate))
 
         n_trials = size(data, 2)
@@ -96,7 +107,7 @@ function apply_trial_dropout(data::AbstractMatrix, events, processing::Processin
 
         keep_trials = trues(n_trials)
         if drop_trials > 0
-            drop_idx = randperm(dropout_rng, n_trials)[1:drop_trials]
+            drop_idx = time_seeded_randperm(n_trials)[1:drop_trials]
             keep_trials[drop_idx] .= false
         end
 

@@ -68,6 +68,11 @@ Base.@kwdef struct ComponentConfig
     componentA_amp_dist::Distribution = Normal(5.0, 1.0)
     componentB_amp_dist::Distribution = Normal(-10.0, 1.0)
     componentC_amp_dist::Distribution = Normal(5.0, 1.0)
+    tilted_bar_hanning_length_dist::Distribution = Normal(50.0, 7.5)
+    one_sided_fan_duration_divisor_dist::Distribution = Normal(40.0, 6.0)
+    one_sided_fan_log_mu_offset_dist::Distribution = Normal(0.2, 0.03)
+    one_sided_fan_log_sigma_dist::Distribution = Normal(1.0, 0.15)
+    one_sided_fan_support_max_dist::Distribution = Normal(10.0, 1.5)
 end
 
 function default_pattern_covariates()
@@ -144,10 +149,9 @@ function UnfoldSim.generate_events(rng::UnfoldSim.AbstractRNG, design::Covariate
             return design.events_cache
         end
 
-        covariate_rng = fresh_rng(rng)
         all_evts = Pair{Symbol, Any}[]
         for (covariate, dist) in design.covariates
-            push!(all_evts, covariate => rand(covariate_rng, dist, design.n_trials))
+            push!(all_evts, covariate => time_seeded_rand(dist, design.n_trials))
         end
 
         if design.design === nothing
@@ -165,7 +169,7 @@ function UnfoldSim.generate_events(rng::UnfoldSim.AbstractRNG, design::Covariate
             error("design.n_trials need to be divisible by size(design.design)")
         end
 
-        categorical_events = generate_events(fresh_rng(rng), RepeatDesign(design.design, Int(n_rep)))
+        categorical_events = generate_events(fresh_rng(), RepeatDesign(design.design, Int(n_rep)))
         if isempty(all_evts)
             design.events_cache = categorical_events
             return design.events_cache
