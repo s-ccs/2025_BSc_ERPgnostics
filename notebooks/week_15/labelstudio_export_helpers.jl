@@ -52,6 +52,15 @@ const DEFAULT_GAME_TRIAL_TYPES = [
     "PLAYER_CRASH_ENEMY",
     "COLLECT_AMMO",
 ]
+const SORT_TIEBREAKER_COLUMNS = [
+    :epoch_index,
+    :sample_index,
+    :event_rank_within_type,
+    :flash_index_within_run,
+    :flash_index_within_trial,
+    :onset_s,
+    :stimulus_onset_s,
+]
 
 const PANEL_PX = 320
 const CB_PX = 62
@@ -142,6 +151,25 @@ function sortvalues_from(df::DataFrame, col::Symbol)
     return collect(values)
 end
 
+function trial_sort_order(df::DataFrame, sort_col::Symbol)
+    row_col = :__row_idx__
+    sort_cols = Symbol[sort_col]
+    for col in SORT_TIEBREAKER_COLUMNS
+        col == sort_col && continue
+        col in propertynames(df) || continue
+        push!(sort_cols, col)
+    end
+
+    order_df = DataFrame()
+    order_df[!, row_col] = collect(1:nrow(df))
+    for col in sort_cols
+        order_df[!, col] = df[!, col]
+    end
+
+    sort!(order_df, sort_cols)
+    return Int.(order_df[!, row_col])
+end
+
 function extract_8bit_channel_trials(erps, events::DataFrame, channel::Int, time_zero_idx::Int; post_stim_only::Bool = true)
     @assert 1 <= channel <= size(erps, 1) "Channel out of range: $channel"
     start_idx = post_stim_only ? time_zero_idx : 1
@@ -154,8 +182,7 @@ function build_base_image(data_time_trials::AbstractMatrix, events_trials::DataF
     @assert size(data_time_trials, 2) == nrow(events_trials) "Trial count mismatch between matrix and events."
     @assert sort_col in propertynames(events_trials) "Sort column not found: $sort_col"
 
-    sortvals = sortvalues_from(events_trials, sort_col)
-    order = sortperm(sortvals)
+    order = trial_sort_order(events_trials, sort_col)
     data_sorted = Float32.(data_time_trials[:, order])
     data_z = zscore_timepoints(data_sorted)
     return Float32.(permutedims(data_z, (2, 1)))

@@ -20,7 +20,7 @@ using Flux: onecold, onehotbatch
 using LinearAlgebra: diagind
 
 include(joinpath(@__DIR__, "..", "utils", "erp_image_utils.jl"))
-using .ERPImageUtils: gaussian_kernel, zscore_timepoints
+using .ERPImageUtils: gaussian_kernel, zscore_timepoints, clipped_color_stats_quantile_zero_ticks
 
 export OPENNEURO_REPO_DIR
 export OPENNEURO_DERIVED_DIR
@@ -65,6 +65,17 @@ const FILTER_BORDER = "reflect"
 const FIXATION_PRE_STIM_S = 0.5
 const FIXATION_SAMPLING_RATE = 512
 const FIXATION_TIME_ZERO_IDX = Int(round(FIXATION_PRE_STIM_S * FIXATION_SAMPLING_RATE)) + 1
+const SORT_TIEBREAKER_COLUMNS = [
+    :source_part_index,
+    :source_epoch_index,
+    :epoch_index,
+    :sample_index,
+    :event_rank_within_type,
+    :flash_index_within_run,
+    :flash_index_within_trial,
+    :onset_s,
+    :stimulus_onset_s,
+]
 
 safe_div(num::Real, den::Real) = den == 0 ? 0.0 : Float64(num) / Float64(den)
 
@@ -194,12 +205,30 @@ function sortvalues_from(df::DataFrame, col::Symbol)
     return collect(values)
 end
 
+function trial_sort_order(df::DataFrame, sort_col::Symbol)
+    row_col = :__row_idx__
+    sort_cols = Symbol[sort_col]
+    for col in SORT_TIEBREAKER_COLUMNS
+        col == sort_col && continue
+        col in propertynames(df) || continue
+        push!(sort_cols, col)
+    end
+
+    order_df = DataFrame()
+    order_df[!, row_col] = collect(1:nrow(df))
+    for col in sort_cols
+        order_df[!, col] = df[!, col]
+    end
+
+    sort!(order_df, sort_cols)
+    return Int.(order_df[!, row_col])
+end
+
 function build_base_image(data_time_trials::AbstractMatrix, events_trials::DataFrame, sort_col::Symbol)
     @assert size(data_time_trials, 2) == nrow(events_trials) "Trial count mismatch between matrix and events."
     @assert sort_col in propertynames(events_trials) "Sort column not found: $sort_col"
 
-    sortvals = sortvalues_from(events_trials, sort_col)
-    order = sortperm(sortvals)
+    order = trial_sort_order(events_trials, sort_col)
     data_sorted = Float32.(data_time_trials[:, order])
     data_z = zscore_timepoints(data_sorted)
     return Float32.(permutedims(data_z, (2, 1)))
@@ -318,8 +347,7 @@ end
 
 function split_indices_sorted_modulo(events_trials::DataFrame, sort_col::Symbol, k::Int)
     @assert k >= 1 "k must be at least 1."
-    sortvals = sortvalues_from(events_trials, sort_col)
-    order = sortperm(sortvals)
+    order = trial_sort_order(events_trials, sort_col)
     groups = [Int[] for _ in 1:k]
     for (rank, idx) in enumerate(order)
         push!(groups[mod1(rank, k)], idx)
@@ -866,13 +894,18 @@ function plot_image_grid(imgs::Vector{<:AbstractMatrix}, meta::DataFrame; n::Int
         col = mod1(plot_idx, ncols)
         ax = Axis(fig[row, col], title = begin
             if :trial_type in propertynames(meta)
-                "$(meta.trial_type[img_idx]) | ch$(meta.channel[img_idx]) | part $(meta.part[img_idx])"
+                if :n_parts in propertynames(meta) && meta.n_parts[img_idx] > 1
+                    "$(meta.trial_type[img_idx]) | ch$(meta.channel[img_idx]) | part $(meta.part[img_idx])"
+                else
+                    "$(meta.trial_type[img_idx]) | ch$(meta.channel[img_idx])"
+                end
             else
                 "$(meta.sort_var[img_idx]) | ch$(meta.channel[img_idx]) | y=$(meta.binary_label[img_idx])"
             end
         end)
-        hm = heatmap!(ax, imgs[img_idx]; colormap = :RdBu, colorrange = (-2, 2))
-        Colorbar(fig[row, col + ncols], hm; width = 12)
+        clipped, colorrange, tick_vals, tick_labels, cmap = clipped_color_stats_quantile_zero_ticks(Float32.(imgs[img_idx]))
+        hm = heatmap!(ax, permutedims(clipped, (2, 1)); colormap = cmap, colorrange = colorrange)
+        Colorbar(fig[row, col + ncols], hm; width = 12, ticks = (tick_vals, tick_labels))
     end
     Label(fig[0, :], title, fontsize = 24)
     return fig

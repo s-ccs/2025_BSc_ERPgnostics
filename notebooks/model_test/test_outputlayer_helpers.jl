@@ -53,6 +53,17 @@ const TARGET_SIZE = (64, 64)
 const LOWPASS_SIGMA = 75.0f0
 const LOWPASS_KERNEL_SIZE = (21, 21)
 const FILTER_BORDER = "reflect"
+const SORT_TIEBREAKER_COLUMNS = [
+    :source_part_index,
+    :source_epoch_index,
+    :epoch_index,
+    :sample_index,
+    :event_rank_within_type,
+    :flash_index_within_run,
+    :flash_index_within_trial,
+    :onset_s,
+    :stimulus_onset_s,
+]
 
 const TABLE_KWARGS = (
     fit_table_in_display_horizontally = false,
@@ -148,6 +159,25 @@ function sortvalues_from(df::DataFrame, col::Symbol)
     return collect(v)
 end
 
+function trial_sort_order(df::DataFrame, sort_col::Symbol)
+    row_col = :__row_idx__
+    sort_cols = Symbol[sort_col]
+    for col in SORT_TIEBREAKER_COLUMNS
+        col == sort_col && continue
+        col in propertynames(df) || continue
+        push!(sort_cols, col)
+    end
+
+    order_df = DataFrame()
+    order_df[!, row_col] = collect(1:nrow(df))
+    for col in sort_cols
+        order_df[!, col] = df[!, col]
+    end
+
+    sort!(order_df, sort_cols)
+    return Int.(order_df[!, row_col])
+end
+
 function extract_channel_trials(erps, events::DataFrame, channel::Int; time_zero_idx::Int = TIME_ZERO_IDX)
     @assert 1 <= channel <= size(erps, 1) "channel out of range"
     data = Float32.(erps[channel, time_zero_idx:end, :])
@@ -167,17 +197,19 @@ function preprocess_erp_subset(
     @assert size(data_time_trials, 2) == nrow(events_trials) "trial count mismatch between matrix and events"
     @assert sort_col in propertynames(events_trials) "sort column not found: $(sort_col)"
 
-    sortvals = sortvalues_from(events_trials, sort_col)
-    order = sortperm(sortvals)
+    order = trial_sort_order(events_trials, sort_col)
     data_sorted = data_time_trials[:, order]
 
     data_z = zscore_timepoints(data_sorted)
     img_trials_time = Float32.(permutedims(data_z, (2, 1)))
 
-    kernel = gaussian_kernel(low_pass_sigma, size(img_trials_time), target_size, lowpass_kernel_size)
-    img_lowpass = Float32.(imfilter(img_trials_time, kernel, filter_border))
+    img_filtered = img_trials_time
+    if low_pass_sigma > 0f0 && min(size(img_filtered)...) > 1
+        kernel = gaussian_kernel(low_pass_sigma, size(img_filtered), target_size, lowpass_kernel_size)
+        img_filtered = Float32.(imfilter(img_filtered, kernel, filter_border))
+    end
 
-    return Float32.(imresize(img_lowpass, target_size))
+    return size(img_filtered) == target_size ? img_filtered : Float32.(imresize(img_filtered, target_size))
 end
 
 function split_indices_sorted_modulo(events_trials::DataFrame, sort_col::Symbol, k::Int)
@@ -185,9 +217,7 @@ function split_indices_sorted_modulo(events_trials::DataFrame, sort_col::Symbol,
     n == 0 && return [Int[]]
     k_eff = min(max(k, 1), n)
 
-    sortvals = sortvalues_from(events_trials, sort_col)
-    order = sortperm(sortvals)
-
+    order = trial_sort_order(events_trials, sort_col)
     groups = [Int[] for _ in 1:k_eff]
     for (i, idx) in enumerate(order)
         push!(groups[((i - 1) % k_eff) + 1], idx)

@@ -31,6 +31,9 @@ docs/site/
 .venvs/
 .vscode/
 
+# Dataset contents
+/notebooks/datasets/
+
 # Data and exported assets
 *.jld2
 *.hdf5
@@ -39,3 +42,8 @@ docs/site/
 *.fdt
 *.set
 *.xlsx
+*.zip
+*.mat
+*.fif
+*.edf
+*.pdf
