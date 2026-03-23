@@ -12,7 +12,7 @@ using Random
 using Statistics
 
 include(joinpath(@__DIR__, "..", "utils", "erp_image_utils.jl"))
-using .ERPImageUtils: gaussian_kernel, zscore_timepoints, clipped_color_stats_quantile_zero_ticks
+using .ERPImageUtils: zscore_timepoints, clipped_color_stats_quantile_zero_ticks
 
 export ERP_CORE_DATASET_KEYS
 export SHORTLIST_PUBLIC_DATASET_KEYS
@@ -84,8 +84,9 @@ const DATASET_COMPONENT_KEYS = Dict(
 )
 
 const REAL_TARGET_SIZE = (64, 64)
-const REAL_LOWPASS_SIGMA = 75.0f0
-const REAL_LOWPASS_KERNEL_SIZE = (21, 21)
+# Anti-aliasing sigma = SIGMA_FACTOR * downsampling_ratio per axis
+# 0.5 = Nyquist-correct (scikit-image, OpenCV convention)
+const LOWPASS_SIGMA_FACTOR = 0.5f0
 const FILTER_BORDER = "reflect"
 const REAL_BASELINE_WINDOW_S = (-0.2f0, 0f0)
 
@@ -459,16 +460,18 @@ end
 
 function process_erp_image(img_trials_time::AbstractMatrix, target_size::Tuple{Int, Int};
         lowpass::Bool = true,
-        low_pass_sigma::Float32 = REAL_LOWPASS_SIGMA,
-        kernel_size::Tuple{Int, Int} = REAL_LOWPASS_KERNEL_SIZE)
+        sigma_factor::Float32 = LOWPASS_SIGMA_FACTOR)
     filtered = Float32.(img_trials_time)
-    if lowpass && low_pass_sigma > 0f0 && min(size(filtered)...) > 1
-        in_h, in_w = size(filtered)
-        out_h, out_w = target_size
-        sigma_h = max(Float32(low_pass_sigma) * Float32(in_h) / Float32(out_h), 1f-3)
-        sigma_w = max(Float32(low_pass_sigma) * Float32(in_w) / Float32(out_w), 1f-3)
-        # Let ImageFiltering auto-compute kernel size from sigma (matches data_vis.ipynb approach)
-        kernel = KernelFactors.gaussian((sigma_h, sigma_w))
+    if lowpass && min(size(filtered)...) > 1
+        # Nyquist-correct anti-aliasing: sigma = factor/2 per axis
+        ratio_h = Float32(size(filtered, 1)) / Float32(target_size[1])
+        ratio_w = Float32(size(filtered, 2)) / Float32(target_size[2])
+        sigma_h = max(sigma_factor * ratio_h, 0.5f0)
+        sigma_w = max(sigma_factor * ratio_w, 0.5f0)
+        # ±3 sigma kernel (99.7% of Gaussian, matches EEGLAB erpimage convention)
+        kh = 2 * ceil(Int, 3 * sigma_h) + 1
+        kw = 2 * ceil(Int, 3 * sigma_w) + 1
+        kernel = KernelFactors.gaussian((sigma_h, sigma_w), (kh, kw))
         filtered = Float32.(imfilter(filtered, kernel, FILTER_BORDER))
     end
     return size(filtered) == target_size ? filtered : Float32.(imresize(filtered, target_size))
@@ -611,29 +614,36 @@ end
 function build_dataset_sort_preview(bundle;
         sort_col::Symbol,
         filters = Pair{Symbol, Any}[],
-        n_subjects::Int = 2,
-        n_channels::Int = 2,
+        n_samples::Int = 8,
         target_size::Tuple{Int, Int} = REAL_TARGET_SIZE,
-        lowpass::Bool = true)
-    subjects = select_preview_subjects(bundle; filters = filters, n_subjects = n_subjects)
-    channels = select_preview_channels(bundle; n_channels = n_channels)
+        lowpass::Bool = true,
+        rng_seed::Int = 42)
+    all_subjects = select_preview_subjects(bundle; filters = filters,
+        n_subjects = length(bundle.subject_labels))
+    all_channels = String.(bundle.channel_names)
+
+    # Build all possible (subject, channel) pairs, then randomly sample n_samples
+    pairs = [(s, c) for s in all_subjects for c in all_channels]
+    rng = MersenneTwister(rng_seed + hash(sort_col))
+    selected = pairs[randperm(rng, length(pairs))[1:min(n_samples, length(pairs))]]
 
     images = Matrix{Float32}[]
     metadata = NamedTuple[]
-    for subject_label in subjects
-        for channel_name in channels
-            sample = build_dataset_image(bundle;
-                subject_label = subject_label,
-                channel_name = channel_name,
-                sort_col = sort_col,
-                filters = filters,
-                target_size = target_size,
-                lowpass = lowpass,
-            )
-            push!(images, sample.image)
-            push!(metadata, sample)
-        end
+    for (subject_label, channel_name) in selected
+        sample = build_dataset_image(bundle;
+            subject_label = subject_label,
+            channel_name = channel_name,
+            sort_col = sort_col,
+            filters = filters,
+            target_size = target_size,
+            lowpass = lowpass,
+        )
+        push!(images, sample.image)
+        push!(metadata, sample)
     end
+
+    subjects_used = unique([s for (s, _) in selected])
+    channels_used = unique([c for (_, c) in selected])
 
     return (
         dataset_key = bundle.dataset_key,
@@ -641,8 +651,8 @@ function build_dataset_sort_preview(bundle;
         sort_col = sort_col,
         filters = filters,
         filters_label = filters_label(filters),
-        subjects = subjects,
-        channels = channels,
+        subjects = subjects_used,
+        channels = channels_used,
         images = images,
         metadata = metadata,
     )
@@ -709,63 +719,63 @@ function axis_ticks(sample)
     )
 end
 
-function plot_dataset_sort_preview(preview)
-    n_rows = length(preview.subjects)
-    n_cols = length(preview.channels)
+function plot_dataset_sort_preview(preview; n_cols::Int = 4)
+    n_total = length(preview.images)
+    n_cols = min(n_cols, n_total)
+    n_rows = cld(n_total, n_cols)
 
-    fig = Figure(size = (500 * n_cols + 80, 295 * n_rows + 140), figure_padding = 20)
+    fig = Figure(size = (380 * n_cols + 80, 295 * n_rows + 140), figure_padding = 20)
     title = preview_title(preview.component, preview.sort_col, preview.filters)
     Label(fig[0, 1:n_cols], title; fontsize = 22, tellwidth = false)
 
-    for row in 1:n_rows
-        for col in 1:n_cols
-            idx = (row - 1) * n_cols + col
-            stats = image_color_stats(preview.images[idx])
-            img = stats.clipped
-            meta = preview.metadata[idx]
-            ticks = axis_ticks(meta)
-            sort_text = meta.sort_range === nothing ? "categorical sort" :
-                @sprintf("sort %.1f..%.1f", meta.sort_range[1], meta.sort_range[2])
+    for idx in 1:n_total
+        row = cld(idx, n_cols)
+        col = mod1(idx, n_cols)
+        stats = image_color_stats(preview.images[idx])
+        img = stats.clipped
+        meta = preview.metadata[idx]
+        ticks = axis_ticks(meta)
+        sort_text = meta.sort_range === nothing ? "categorical sort" :
+            @sprintf("sort %.1f..%.1f", meta.sort_range[1], meta.sort_range[2])
 
-            cell = GridLayout(fig[row, col])
-            ax = Axis(cell[1, 1];
-                title = row == 1 ? meta.channel_name : "",
-                xlabel = row == n_rows ? "post-stimulus timepoints\nelapsed time after stimulus" : "",
-                ylabel = col == 1 ? "$(meta.subject_label)\ntrial rank" : "",
-                titlesize = 15,
-                xlabelsize = 13,
-                ylabelsize = 13,
-                xticklabelsize = 10,
-                yticklabelsize = 10,
-            )
-            ax.xticks = ticks.xticks
-            ax.yticks = ticks.yticks
+        cell = GridLayout(fig[row, col])
+        ax = Axis(cell[1, 1];
+            title = "$(meta.subject_label) | $(meta.channel_name)",
+            xlabel = row == n_rows ? "post-stimulus timepoints\nelapsed time after stimulus" : "",
+            ylabel = col == 1 ? "trial rank" : "",
+            titlesize = 13,
+            xlabelsize = 12,
+            ylabelsize = 12,
+            xticklabelsize = 9,
+            yticklabelsize = 9,
+        )
+        ax.xticks = ticks.xticks
+        ax.yticks = ticks.yticks
 
-            hm = heatmap!(
-                ax,
-                1:size(img, 2),
-                1:size(img, 1),
-                permutedims(img, (2, 1));
-                colormap = stats.cmap,
-                colorrange = stats.colorrange,
-            )
+        hm = heatmap!(
+            ax,
+            1:size(img, 2),
+            1:size(img, 1),
+            permutedims(img, (2, 1));
+            colormap = stats.cmap,
+            colorrange = stats.colorrange,
+        )
 
-            info = @sprintf(
-                "n=%d | %s | %.0f Hz",
-                meta.n_trials,
-                sort_text,
-                meta.sampling_rate_hz,
-            )
-            text!(ax, 0.02, 0.02, text = info, space = :relative, align = (:left, :bottom), fontsize = 9)
+        info = @sprintf(
+            "n=%d | %s | %.0f Hz",
+            meta.n_trials,
+            sort_text,
+            meta.sampling_rate_hz,
+        )
+        text!(ax, 0.02, 0.02, text = info, space = :relative, align = (:left, :bottom), fontsize = 8)
 
-            Colorbar(
-                cell[1, 2],
-                hm;
-                ticks = (stats.tick_vals, stats.tick_labels),
-                ticklabelsize = 9,
-                width = 14,
-            )
-        end
+        Colorbar(
+            cell[1, 2],
+            hm;
+            ticks = (stats.tick_vals, stats.tick_labels),
+            ticklabelsize = 8,
+            width = 12,
+        )
     end
     return fig
 end
