@@ -10,11 +10,381 @@
 // Fill me with acknowledgments
 #let acknowledgements = [#lorem(50)]
 
+#let appendix-term-table(..args) = table(
+  columns: (1.15fr, 4.15fr),
+  inset: (x: 5pt, y: 4pt),
+  stroke: .4pt + luma(180),
+  fill: (_, y) => if y == 0 {
+    rgb("#eaf1f8")
+  } else if calc.odd(y) {
+    rgb("#f8fafc")
+  } else {
+    white
+  },
+  align: (x, y) => if y == 0 { center } else { left + top },
+  ..args,
+)
+
+#let appendix-result-table(..args) = table(
+  columns: (1.2fr, 1.15fr, 3.55fr, 1.1fr),
+  inset: (x: 5pt, y: 4pt),
+  stroke: .4pt + luma(180),
+  fill: (_, y) => if y == 0 {
+    rgb("#eaf1f8")
+  } else if calc.odd(y) {
+    rgb("#f8fafc")
+  } else {
+    white
+  },
+  align: (x, y) => if y == 0 { center } else { left + top },
+  ..args,
+)
 
 // if you have appendices, add them here
 #let appendix = [
   = Appendices
-  //#include "./chapters/appendix.typ"
+
+  #set par(justify: false)
+
+  This appendix collects short definitions for the main experimental terms and
+  compact comparison tables for the model results discussed in the thesis.
+  The goal is to document which model, which data split, which preprocessing
+  pipeline, and which measured outcome correspond to each result claim.
+
+  == Short Definitions of the Main Experimental Terms
+
+  #set text(size: 9pt)
+  #appendix-term-table(
+    [*Term*], [*Meaning in this thesis*],
+
+    [Supervised learning], [
+      Train the classifier only on real labelled ERP images. No pseudo-labels
+      are added.
+    ],
+    [Self-supervised learning (SSL)], [
+      Pretrain the encoder without class labels. In this project that stage is
+      SimCLR-style contrastive learning on ERP images.
+    ],
+    [Linear probe], [
+      Freeze the SSL encoder and train only a new classifier head on labelled
+      ERP images.
+    ],
+    [Fine-tuning], [
+      Update the full pretrained model on labelled ERP images so the learned
+      representation adapts to the task.
+    ],
+    [Semi-self-supervised learning], [
+      Use SSL first, then extend later training with pseudo-labelled examples
+      from an unlabeled pool.
+    ],
+    [Pseudo-labeling], [
+      Predict labels for unlabeled ERP images and keep only the high-confidence
+      predictions as temporary training labels.
+    ],
+    [Trainfold images], [
+      Use only ERP images from the current training folds as SSL input. The
+      validation fold stays unseen.
+    ],
+    [Same-dataset mod-4 pool], [
+      A larger unlabeled ERP-image pool from the same fixation dataset,
+      generated with the same mod-4 policy.
+    ],
+    [Mod-4 split], [
+      Split the sorted trials into four modulo parts. In week 18, pattern
+      contributes 4 parts and no pattern contributes 1 part.
+    ],
+    [Grouped 5-fold cross-validation], [
+      Samples from the same original ERP source stay in the same fold to avoid
+      train/validation leakage.
+    ],
+    [Balanced accuracy], [
+      Mean recall across both classes. It is preferred here because the labels
+      are imbalanced.
+    ],
+    [Macro-F1], [
+      F1 averaged equally across both classes, so the majority class does not
+      dominate the score.
+    ],
+  )
+  #set text(size: 11pt)
+
+  #pagebreak()
+
+  == Real-Data Supervised Baseline Candidates
+
+  The table below focuses on experiments that use only the real fixation ERP
+  data for the actual classification objective. This is the most relevant
+  reference set when later methods are compared against a real-data baseline.
+  All rows use the project default: mod-4 split and grouped 5-fold
+  cross-validation. The numbers come from the saved preprocessing notebook
+  output and the exported augmentation summaries.
+
+  #set text(size: 8.2pt)
+  #appendix-result-table(
+    [*Experiment*], [*Model*], [*Key setup*], [*Outcome*],
+
+    [Preprocessing], [
+      ResNet18, pretrained
+    ], [
+      Best overall supervised run. Sort, z-score, Gaussian, filter, resize.
+      Dilation filter, default radius, Gaussian high 100, 8 epochs.
+    ], [
+      BAcc 0.907.\ Macro-F1 0.903.
+    ],
+
+    [Preprocessing], [
+      ResNet18, pretrained
+    ], [
+      Best Gaussian-only reference. Sort, z-score, Gaussian, resize. No
+      filter. Gaussian mid 50, 8 epochs.
+    ], [
+      BAcc 0.904.\ Macro-F1 0.898.
+    ],
+
+    [Preprocessing], [
+      ResNet18, random init
+    ], [
+      Best random-init run. Sort, z-score, filter, resize. Opening filter,
+      low setting, no Gaussian, 8 epochs.
+    ], [
+      BAcc 0.875.\ Macro-F1 0.881.
+    ],
+
+    [Sup. augmentation], [
+      ResNet18, random init
+    ], [
+      Trial dropout with threshold tuning. Class-aware augmentation: 4 pattern
+      views and 1 no-pattern view.
+    ], [
+      BAcc 0.902.\ Macro-F1 0.880.
+    ],
+
+    [Sup. augmentation], [
+      ResNet18, random init
+    ], [
+      Standard cross-entropy baseline. No SSL, no pseudo-labels, no
+      augmentation, tuned threshold.
+    ], [
+      BAcc 0.551.\ Macro-F1 0.505.
+    ],
+  )
+  #set text(size: 11pt)
+
+  The strongest supervised-only result in the current code base came from the
+  preprocessing challenge with the pretrained ResNet18. The Gaussian-only
+  reference was already very strong, and the best filter-augmented pipeline
+  improved it only slightly. The best random-initialised baseline was weaker
+  than the pretrained baseline but still clearly above the raw supervised
+  baseline from the SSL notebook.
+
+  #pagebreak()
+
+  == Supervised Augmentation and Imbalance Handling
+
+  This table isolates the supervised-only comparison from the dedicated
+  augmentation notebook. All runs use only labelled fixation ERP images with
+  the shared mod-4 split and grouped 5-fold CV.
+  The numbers come from data_augmentation_tests_ranked_summary.csv.
+
+  #set text(size: 8.2pt)
+  #appendix-result-table(
+    [*Experiment*], [*Model*], [*Key setup*], [*Outcome*],
+
+    [Augmentation], [
+      ResNet18, random init
+    ], [
+      Trial dropout, threshold-tuned, class-aware augmentation:
+      4 pattern views and 1 no-pattern view.
+    ], [
+      BAcc 0.902.\ Macro-F1 0.880.
+    ],
+
+    [Augmentation], [
+      ResNet18, random init
+    ], [
+      Pink-noise augmentation, threshold-tuned, class-aware augmentation:
+      4 pattern views and 1 no-pattern view.
+    ], [
+      BAcc 0.886.\ Macro-F1 0.877.
+    ],
+
+    [Augmentation], [
+      ResNet18, random init
+    ], [
+      Time jitter, threshold-tuned, class-aware augmentation:
+      4 pattern views and 1 no-pattern view.
+    ], [
+      BAcc 0.886.\ Macro-F1 0.882.
+    ],
+
+    [Augmentation], [
+      ResNet18, random init
+    ], [
+      Safe combination of ERP augmentations, threshold-tuned, class-aware:
+      4 pattern views and 1 no-pattern view.
+    ], [
+      BAcc 0.883.\ Macro-F1 0.867.
+    ],
+
+    [Imbalance], [
+      ResNet18, random init
+    ], [
+      Class-weighted cross-entropy, no augmentation, tuned threshold.
+    ], [
+      BAcc 0.516.\ Macro-F1 0.446.
+    ],
+
+    [Imbalance], [
+      ResNet18, random init
+    ], [
+      Focal loss, no augmentation, tuned threshold.
+    ], [
+      BAcc 0.538.\ Macro-F1 0.427.
+    ],
+
+    [Imbalance], [
+      ResNet18, random init
+    ], [
+      Balanced batches, no augmentation, tuned threshold.
+    ], [
+      BAcc 0.532.\ Macro-F1 0.475.
+    ],
+  )
+  #set text(size: 11pt)
+
+  These results should be read carefully. In the augmentation study the gain is
+  not a pure augmentation effect, because the training set was also rebalanced
+  by generating four augmented views for each labelled pattern example and one
+  augmented view for each labelled no-pattern example.
+
+  #pagebreak()
+
+  == SSL and Semi-SSL Comparison
+
+  The SSL notebook compares representation learning, transfer mode, and
+  pseudo-labeling. Unlike the supervised baselines above, these rows use either
+  an unlabeled pretraining pool, pseudo-labels, or both.
+  All rows are still evaluated with the project default: mod-4 split and
+  grouped 5-fold CV.
+  The numbers come from semi_supervised_learing2_summary.csv.
+
+  #set text(size: 8.2pt)
+  #appendix-result-table(
+    [*Experiment*], [*Model*], [*Key setup*], [*Outcome*],
+
+    [SSL baseline], [
+      ResNet18, supervised
+    ], [
+      No SSL; no pseudo-labels; direct supervised training only.
+    ], [
+      BAcc 0.500.\ Macro-F1 0.377.
+    ],
+
+    [Self-supervised], [
+      ResNet18, SSL fine-tune
+    ], [
+      SSL pool: trainfold images. SimCLR-style pretraining on the current
+      fold's training images, then
+      full fine-tuning on true labels.
+    ], [
+      BAcc 0.676.\ Macro-F1 0.697.
+    ],
+
+    [Semi-SSL], [
+      ResNet18, SSL fine-tune
+    ], [
+      SSL pool: same-dataset mod-4 pool. SimCLR-style pretraining on the
+      larger same-dataset mod-4 pool, then
+      full fine-tuning on true labels.
+    ], [
+      BAcc 0.776.\ Macro-F1 0.788.
+    ],
+
+    [Semi-SSL + pseudo-labels], [
+      ResNet18, SSL fine-tune + student stage
+    ], [
+      SSL pool: same-dataset mod-4 pool. Same SSL stage as above, then
+      confidence-based pseudo-labeling with
+      threshold 0.9; about 823 pseudo-labels kept per fold.
+    ], [
+      BAcc 0.837.\ Macro-F1 0.849.
+    ],
+
+    [Linear probe], [
+      ResNet18, SSL linear probe
+    ], [
+      SSL pool: trainfold images. SSL pretraining, frozen encoder, and a
+      newly trained classifier head only.
+    ], [
+      BAcc 0.495.\ Macro-F1 0.388.
+    ],
+
+    [Linear probe], [
+      ResNet18, SSL linear probe
+    ], [
+      SSL pool: same-dataset mod-4 pool. SSL pretraining on the mod-4 pool,
+      frozen encoder, and a newly trained
+      classifier head only.
+    ], [
+      BAcc 0.505.\ Macro-F1 0.428.
+    ],
+  )
+  #set text(size: 11pt)
+
+  The difference between fine-tuning and semi-SSL is important. Fine-tuning
+  still learns only from true labels after the SSL stage. Semi-SSL adds a
+  second student-training stage in which high-confidence predictions from an
+  unlabeled pool are reused as pseudo-labels. In the current experiments that
+  extra stage improved balanced accuracy from 0.776 to 0.837.
+
+  == Behaviour on New Unlabeled ERP Candidates
+
+  These rows are not performance metrics in the strict sense, because the
+  candidate ERP images have no ground-truth labels. They are included here only
+  as evidence for how the trained models behave when screening new data.
+  The trained models come from the same mod-4 grouped 5-fold evaluation
+  protocol as above.
+  The numbers come from semi_supervised_learing2_unlabeled_summary.csv.
+
+  #set text(size: 8.2pt)
+  #appendix-result-table(
+    [*Experiment*], [*Model*], [*Key setup*], [*Outcome*],
+
+    [Screening], [
+      ResNet18, supervised
+    ], [
+      Raw supervised baseline on the screened pool.
+    ], [
+      Pattern rate 0.000.\ Mean confidence 0.935.
+    ],
+
+    [Screening], [
+      ResNet18, SSL fine-tune
+    ], [
+      SSL source: trainfold images. No pseudo-labeling in the final stage.
+    ], [
+      Pattern rate 0.065.\ Mean confidence 0.934.
+    ],
+
+    [Screening], [
+      ResNet18, SSL fine-tune
+    ], [
+      SSL source: same-dataset mod-4 pool. No pseudo-labeling in the final
+      stage.
+    ], [
+      Pattern rate 0.043.\ Mean confidence 0.964.
+    ],
+
+    [Screening], [
+      ResNet18, SSL fine-tune + pseudo-labeling
+    ], [
+      Semi-SSL with the same-dataset mod-4 pool and a pseudo-label student
+      stage.
+    ], [
+      Pattern rate 0.069.\ Mean confidence 0.965.
+    ],
+  )
+  #set text(size: 11pt)
 ]
 
 // Put your abbreviations/acronyms here.
