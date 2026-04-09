@@ -27,6 +27,9 @@ export run_supervised_augmentation_cv
 export summarize_supervised_augmentation_results
 
 const DEFAULT_BASELINE_WINDOW = nothing
+const DEFAULT_POSITIVE_SPLIT_K = 4
+const DEFAULT_NO_CLASS_SPLIT_K = 4
+const DEFAULT_K_FOLDS = 5
 
 """
 Return the augmentation settings used in the supervised-only experiment.
@@ -41,7 +44,8 @@ function augmentation_specs()
             name = "none",
             label = "Reference only",
             stage = :none,
-            copies = 0,
+            copies_pattern = 0,
+            copies_no_pattern = 0,
             baseline_window_ms = DEFAULT_BASELINE_WINDOW,
             description = "No augmented copies; standard sort -> z-score -> Gaussian -> resize reference.",
         ),
@@ -49,68 +53,79 @@ function augmentation_specs()
             name = "trial_shuffle",
             label = "Trial shuffling",
             stage = :pre_resize_image,
-            copies = 1,
+            copies_pattern = 4,
+            copies_no_pattern = 1,
             baseline_window_ms = DEFAULT_BASELINE_WINDOW,
-            description = "Randomly permute the trial axis after sorting. This is a stress-test because it destroys the sorted-trial structure.",
+            description = "Randomly permute the trial axis after sorting. This is a stress-test because it destroys the sorted-trial structure. Each labeled pattern sample gets 4 augmented views, each labeled no-pattern sample gets 1.",
         ),
         (
             name = "amplitude_scaling",
             label = "Amplitude scaling",
             stage = :pre_resize_image,
-            copies = 1,
+            copies_pattern = 4,
+            copies_no_pattern = 1,
             baseline_window_ms = DEFAULT_BASELINE_WINDOW,
-            description = "Multiply the ERP image by a global factor sampled from [0.7, 1.3].",
+            description = "Multiply the ERP image by a global factor sampled from [0.7, 1.3]. Each labeled pattern sample gets 4 augmented views, each labeled no-pattern sample gets 1.",
         ),
         (
             name = "time_jitter",
             label = "Small time jitter",
             stage = :pre_resize_image,
-            copies = 1,
+            copies_pattern = 4,
+            copies_no_pattern = 1,
             baseline_window_ms = DEFAULT_BASELINE_WINDOW,
-            description = "Shift the time axis by +/-5 to +/-10 samples before resizing.",
+            description = "Shift the time axis by +/-5 to +/-10 samples before resizing. Each labeled pattern sample gets 4 augmented views, each labeled no-pattern sample gets 1.",
         ),
         (
             name = "pink_noise",
             label = "Pink noise",
             stage = :pre_resize_image,
-            copies = 1,
+            copies_pattern = 4,
+            copies_no_pattern = 1,
             baseline_window_ms = DEFAULT_BASELINE_WINDOW,
-            description = "Add approximate 1/f noise with sigma sampled from [0.1, 0.3].",
+            description = "Add approximate 1/f noise with sigma sampled from [0.1, 0.3]. Each labeled pattern sample gets 4 augmented views, each labeled no-pattern sample gets 1.",
         ),
         (
             name = "trial_dropout",
             label = "Trial dropout",
             stage = :pre_resize_image,
-            copies = 1,
+            copies_pattern = 4,
+            copies_no_pattern = 1,
             baseline_window_ms = DEFAULT_BASELINE_WINDOW,
-            description = "Drop 10-20% of rows from the sorted trial image and resize back to 64x64.",
+            description = "Drop 10-20% of rows from the sorted trial image and resize back to 64x64. Each labeled pattern sample gets 4 augmented views, each labeled no-pattern sample gets 1.",
         ),
         (
             name = "baseline_m100_0",
             label = "Baseline -100..0 ms",
             stage = :raw_baseline,
-            copies = 1,
+            copies_pattern = 4,
+            copies_no_pattern = 1,
             baseline_window_ms = (-100, 0),
-            description = "Add an alternate view after subtracting each trial's -100..0 ms pre-stimulus baseline.",
+            description = "Add an alternate view after subtracting each trial's -100..0 ms pre-stimulus baseline. Each labeled pattern sample gets 4 augmented views, each labeled no-pattern sample gets 1.",
         ),
         (
             name = "baseline_m200_0",
             label = "Baseline -200..0 ms",
             stage = :raw_baseline,
-            copies = 1,
+            copies_pattern = 4,
+            copies_no_pattern = 1,
             baseline_window_ms = (-200, 0),
-            description = "Add an alternate view after subtracting each trial's -200..0 ms pre-stimulus baseline.",
+            description = "Add an alternate view after subtracting each trial's -200..0 ms pre-stimulus baseline. Each labeled pattern sample gets 4 augmented views, each labeled no-pattern sample gets 1.",
         ),
         (
             name = "safe_combo",
             label = "Safe ERP combo",
             stage = :pre_resize_image,
-            copies = 1,
+            copies_pattern = 4,
+            copies_no_pattern = 1,
             baseline_window_ms = DEFAULT_BASELINE_WINDOW,
-            description = "Combine amplitude scaling, small time jitter, pink noise, and mild trial dropout.",
+            description = "Combine amplitude scaling, small time jitter, pink noise, and mild trial dropout. Each labeled pattern sample gets 4 augmented views, each labeled no-pattern sample gets 1.",
         ),
     ]
 end
+
+augmentation_copy_count(spec, binary_label::Int) = binary_label == 1 ? Int(spec.copies_pattern) : Int(spec.copies_no_pattern)
+has_augmentation_copies(spec) = max(Int(spec.copies_pattern), Int(spec.copies_no_pattern)) > 0
 
 function imbalance_strategy_specs()
     return [
@@ -293,11 +308,11 @@ function build_reference_supervised_dataset(notebook_dir::AbstractString;
     lowpass_kernel_size::Tuple{Int, Int},
     filter_border::String,
     time_zero_idx::Int,
-    positive_split_k::Int,
-    no_class_split_k::Int,
+    positive_split_k::Int = DEFAULT_POSITIVE_SPLIT_K,
+    no_class_split_k::Int = DEFAULT_NO_CLASS_SPLIT_K,
     no_class_pick_seed::Int,
     fold_seed::Int,
-    k_folds::Int)
+    k_folds::Int = DEFAULT_K_FOLDS)
 
     data_ctx = CNNUtils.prepare_real_fixations_inputs(notebook_dir)
     sample_plan_df = CNNUtils.build_single_channel_sample_plan(
@@ -392,13 +407,14 @@ function materialize_augmented_training_tensor(erps, events::DataFrame, supervis
     lowpass_kernel_size::Tuple{Int, Int},
     filter_border::String)
 
-    spec.copies <= 0 && return Array{Float32, 4}(undef, target_size[1], target_size[2], 1, 0), Int[]
+    !has_augmentation_copies(spec) && return Array{Float32, 4}(undef, target_size[1], target_size[2], 1, 0), Int[]
 
     imgs = Matrix{Float32}[]
     y_aug = Int[]
-    for _ in 1:spec.copies
-        for idx in train_indices
-            row = supervised_df[idx, :]
+    for idx in train_indices
+        row = supervised_df[idx, :]
+        n_copies = augmentation_copy_count(spec, Int(row.binary_label))
+        for _ in 1:n_copies
             push!(imgs, materialize_augmented_image_for_row(
                 erps,
                 events,
@@ -752,7 +768,7 @@ function run_supervised_augmentation_cv(ctx;
             X_fit = ctx.X[:, :, :, fit_idx]
             y_fit = ctx.y[fit_idx]
 
-            if spec.augmentation.copies > 0
+            if has_augmentation_copies(spec.augmentation)
                 aug_rng = MersenneTwister(seed + 100_000 * fold_id + experiment_seed_offset)
                 X_aug, y_aug = materialize_augmented_training_tensor(
                     ctx.data_ctx.erps,
@@ -809,10 +825,15 @@ function run_supervised_augmentation_cv(ctx;
                 n_fit_total = length(y_fit),
                 n_tune = length(tune_idx),
                 n_val = length(val_idx),
+                n_pattern_reference_fit = count(==(1), ctx.y[fit_idx]),
+                n_no_pattern_reference_fit = count(==(0), ctx.y[fit_idx]),
                 n_pattern_fit = count(==(1), y_fit),
                 n_no_pattern_fit = count(==(0), y_fit),
+                n_pattern_augmented = count(==(1), y_fit) - count(==(1), ctx.y[fit_idx]),
+                n_no_pattern_augmented = count(==(0), y_fit) - count(==(0), ctx.y[fit_idx]),
                 augmentation_name = spec.augmentation_name,
-                augmentation_copies = spec.augmentation.copies,
+                augmentation_copies_pattern = Int(spec.augmentation.copies_pattern),
+                augmentation_copies_no_pattern = Int(spec.augmentation.copies_no_pattern),
                 augmentation_stage = String(spec.augmentation.stage),
                 strategy_name = spec.strategy_name,
                 loss = String(spec.strategy.loss),
@@ -889,6 +910,12 @@ function summarize_supervised_augmentation_results(cv_df::DataFrame)
         :pr_auc => mean => :pr_auc_mean,
         :threshold_tuned => mean => :threshold_tuned_mean,
         :best_epoch => mean => :best_epoch_mean,
+        :augmentation_copies_pattern => mean => :augmentation_copies_pattern_mean,
+        :augmentation_copies_no_pattern => mean => :augmentation_copies_no_pattern_mean,
+        :n_pattern_reference_fit => mean => :n_pattern_reference_fit_mean,
+        :n_no_pattern_reference_fit => mean => :n_no_pattern_reference_fit_mean,
+        :n_pattern_augmented => mean => :n_pattern_augmented_mean,
+        :n_no_pattern_augmented => mean => :n_no_pattern_augmented_mean,
         :n_fit_total => mean => :n_fit_total_mean,
         :train_time_s => mean => :train_time_mean_s,
     )
