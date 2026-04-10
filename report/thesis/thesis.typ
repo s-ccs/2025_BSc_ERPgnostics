@@ -272,22 +272,14 @@
   #appendix-result-table(
     [*Experiment*], [*Model*], [*Key setup*], [*Outcome*],
 
-    [SSL baseline], [
-      ResNet18, supervised
+    [Semi-SSL + pseudo-labels], [
+      ResNet18, SSL fine-tune + student stage
     ], [
-      No SSL; no pseudo-labels; direct supervised training only.
+      SSL pool: same-dataset mod-4 pool. Same SSL stage as above, then
+      confidence-based pseudo-labeling with
+      threshold 0.9; about 823 pseudo-labels kept per fold.
     ], [
-      BAcc 0.500.\ Macro-F1 0.377.
-    ],
-
-    [Self-supervised], [
-      ResNet18, SSL fine-tune
-    ], [
-      SSL pool: trainfold images. SimCLR-style pretraining on the current
-      fold's training images, then
-      full fine-tuning on true labels.
-    ], [
-      BAcc 0.676.\ Macro-F1 0.697.
+      BAcc 0.837.\ Macro-F1 0.849.
     ],
 
     [Semi-SSL], [
@@ -300,23 +292,14 @@
       BAcc 0.776.\ Macro-F1 0.788.
     ],
 
-    [Semi-SSL + pseudo-labels], [
-      ResNet18, SSL fine-tune + student stage
+    [Self-supervised], [
+      ResNet18, SSL fine-tune
     ], [
-      SSL pool: same-dataset mod-4 pool. Same SSL stage as above, then
-      confidence-based pseudo-labeling with
-      threshold 0.9; about 823 pseudo-labels kept per fold.
+      SSL pool: trainfold images. SimCLR-style pretraining on the current
+      fold's training images, then
+      full fine-tuning on true labels.
     ], [
-      BAcc 0.837.\ Macro-F1 0.849.
-    ],
-
-    [Linear probe], [
-      ResNet18, SSL linear probe
-    ], [
-      SSL pool: trainfold images. SSL pretraining, frozen encoder, and a
-      newly trained classifier head only.
-    ], [
-      BAcc 0.495.\ Macro-F1 0.388.
+      BAcc 0.676.\ Macro-F1 0.697.
     ],
 
     [Linear probe], [
@@ -327,6 +310,23 @@
       classifier head only.
     ], [
       BAcc 0.505.\ Macro-F1 0.428.
+    ],
+
+    [SSL baseline], [
+      ResNet18, supervised
+    ], [
+      No SSL; no pseudo-labels; direct supervised training only.
+    ], [
+      BAcc 0.500.\ Macro-F1 0.377.
+    ],
+
+    [Linear probe], [
+      ResNet18, SSL linear probe
+    ], [
+      SSL pool: trainfold images. SSL pretraining, frozen encoder, and a
+      newly trained classifier head only.
+    ], [
+      BAcc 0.495.\ Macro-F1 0.388.
     ],
   )
   #set text(size: 11pt)
