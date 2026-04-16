@@ -628,20 +628,240 @@ sigmoid pattern in real recordings @Schepers2025.
 = Background and Related Work <chp:background>
 
 == EEG, ERPs, and ERP Images
-// Explain the signal domain, what ERP images represent, and why the sigmoid
-// pattern is a meaningful target.
+Electroencephalography (EEG) is a method for recording electrical brain
+activity from the scalp. In a typical human EEG experiment, an electrode cap is
+placed on the participant's head, the electrodes are connected to an amplifier,
+and each electrode records a voltage time series relative to a reference
+electrode @Light2010. These voltages are small, indirect measurements. The
+signal at one scalp electrode is not the activity of a single neuron, but a
+macroscopic field signal shaped by many synchronised postsynaptic currents,
+the geometry of the head, the chosen reference, and volume conduction through
+brain tissue, skull, and scalp @Nunez2006 @Cohen2014. The strength of EEG is
+therefore temporal rather than spatial: it can follow neural activity on the
+scale of milliseconds. Its weakness is that each single trial mixes the
+event-related response of interest with ongoing brain activity, eye movements,
+muscle artefacts, line noise, and other measurement noise @Luck2014.
+
+An event-related potential (ERP) is not recorded as a separate signal. It is
+estimated from the continuous EEG by using the event markers of an experiment.
+An event marker defines a meaningful time point, for example stimulus onset,
+the start of a fixation, or a participant's response. Around each event, the
+continuous EEG is cut into a short epoch, such as a pre-stimulus baseline
+period followed by several hundred milliseconds after the event. Each epoch is
+one trial. Standard ERP preprocessing then usually includes steps such as
+filtering, artefact handling, and baseline correction, where the mean voltage
+in the pre-event interval is subtracted from the epoch @Luck2014 @Light2010.
+Classical ERP analysis aligns all epochs at time zero and averages them. Signal
+components that occur consistently after the event remain visible in the
+average, whereas activity that is not consistently time-locked is reduced by
+averaging @Luck2014. ERP components such as P100, N170, and P300 are then
+described by their polarity, latency, amplitude, and scalp distribution
+@Luck2014 @Kappenman2021.
+
+The average ERP is useful, but it deliberately removes single-trial variation.
+Two datasets can have almost the same average waveform even if one contains a
+systematic latency drift across trials and the other contains a stable response
+with only random noise. Jung et al. make this issue explicit in their work on
+single-trial ERP analysis: relevant event-related dynamics may be hidden by the
+average because individual trials differ in latency, amplitude, and artefact
+contamination @Jung2001. An ERP image keeps this single-trial information. It
+is not a photograph of the brain and not a scalp topography. It is a
+two-dimensional representation of one EEG channel or one extracted ERP signal:
+the horizontal axis is time, the vertical axis is trial number, and the colour
+at each cell encodes the voltage amplitude for one trial at one time point
+@Jung2001.
+
+The construction of an ERP image in this thesis follows the same conceptual
+pipeline as the project proposal: EEG/ERP recording first, ERP images second,
+pattern detection third. Starting from continuous EEG, the pipeline selects a
+channel, extracts event-locked epochs, applies the same preprocessing choices
+to all images, keeps the analysis window, and arranges the resulting data as a
+trial-by-time matrix. The matrix can then be normalised, smoothed, cropped, or
+resized so that it matches the input format of the CNN. The crucial step is
+the ordering of the rows. If rows are left in recording order, the image mainly
+shows the chronological sequence of trials. If rows are sorted by an
+experimental variable, a behavioural variable such as reaction time, or a
+simulated event parameter, the same voltage matrix can reveal whether the
+response changes systematically with that variable. A latency shift can become
+a slanted or curved band; an amplitude change can become a gradual colour
+change; a categorical split can become two visually distinct blocks. ERP images
+therefore preserve more information than a single averaged ERP waveform while
+still giving a compact visual summary.
+
+In this thesis, the central positive class is not any ERP component in general
+but a specific ERP-image shape: the `sigmoid` pattern. Operationally, an image
+is treated as sigmoid-like when a connected S-shaped band extends across time
+while moving smoothly across the sorted trial axis. The label is therefore tied
+to a relation between three elements: the time course of the ERP response, the
+variable used to order the trials, and the visual continuity of the band. This
+distinction matters for the later simulation. A single simulated time-by-trial
+matrix can produce several different ERP images, and therefore several
+different apparent pattern classes, if the trials are sorted by different event
+variables.
 
 == CNN-Based Pattern Detection in ERP Data
-// Introduce CNNs only to the degree needed for this thesis and summarize how
-// automated ERP or EEG classification has been approached in prior work.
+Convolutional neural networks are designed to learn local filters and combine
+them across layers into increasingly abstract image features @LeCun2015. For
+ERP images, this inductive bias is useful because the target is visibly
+spatial: the model must detect short temporal segments, local contrast changes,
+neighbouring trial rows, and finally larger connected shapes. A CNN is therefore
+a plausible model for the same type of judgement made during manual labelling:
+does the image contain a coherent pattern rather than unrelated local patches?
+
+The limitation is that an ERP image is not a natural photograph. The horizontal
+axis is time, the vertical axis is a sorted trial index, and the pixel values
+come from a preprocessed electrophysiological signal. Sorting, z-scoring,
+filtering, cropping, colour scaling, and resizing can all change what the CNN
+sees. Roy et al. review deep-learning work on EEG and emphasise that
+performance depends heavily on preprocessing, available labels, validation
+design, and reproducibility @Roy2019. For this thesis, this means that a strong
+CNN score is not automatically evidence of a neurophysiological pattern. It may
+also indicate that the model has learned a simulator artefact, a preprocessing
+artefact, or a dataset-specific shortcut.
+
+The empirical task is therefore deliberately narrow. The model receives one
+single-channel ERP image and predicts one of two labels: `sigmoid` or
+`no_class`. The binary framing keeps the main transfer question clear: can a
+shape learned from simulated sigmoid images still be recognised when the input
+comes from manually labelled real ERP images?
 
 == Data Simulation, Sim-to-Real Transfer, and Semi-Supervised Learning
-// Explain why simulation is attractive, why the sim-to-real gap matters, and
-// how prior work has tried to bridge similar gaps.
+The starting point for the simulation work is the label bottleneck. Manual
+labelling requires a person to inspect an ERP image, decide whether a connected
+pattern is visible, and separate the target pattern from noise or from other
+visual structures. Simulation changes this trade-off: we choose the event
+design, component timing, covariates, noise process, sorting variable, and
+label before the image is generated. UnfoldSim is well suited to this role
+because it simulates continuous event-based time series for EEG and related
+signals, rather than only isolated averaged waveforms @Schepers2025.
+
+The first project prototype used this idea to define a library of ERP-image
+patterns. One simulated time-by-trial matrix was rendered several times, each
+time with a different row ordering. The visible class was therefore determined
+by the sorting variable:
+
+- `sigmoid`: trials sorted by the latency difference to the next event, written
+  as `Delta latency` in the event table;
+- `one_sided_fan`: trials sorted by a duration covariate and combined with a
+  lognormal time-varying basis;
+- `two_sided_fan`: trials sorted by a second duration covariate and combined
+  with a Hanning-shaped time-varying basis;
+- `diverging_bar`: trials sorted by a categorical condition such as `car`
+  versus `face`;
+- `hourglass`: trials sorted by a continuous covariate that modulates the N170
+  component;
+- `tilted_bar`: trials sorted by a linear-duration covariate and combined with
+  a shifted Hanning basis.
+
+This design choice is important because the class is not encoded by a separate
+image generator for each pattern. Instead, the same simulated ERP activity can
+be made to reveal different structures through sorting. The later `no_class`
+label follows the same logic. It is not an empty or all-noise image. It is an
+ERP image created from the same simulated activity, but with a random trial
+order, so that the systematic relation between trials and time is removed.
+
+The later `ERPGen` implementation turns the prototype into a configurable
+pipeline. A single repetition first samples global simulation settings:
+lognormal onset parameters, trial count, sampling rate, and epoch duration.
+It then samples P100-, N170-, and P300-like component parameters, including
+widths, relative gaps, peak locations within each component window, and
+amplitudes. These component names should be read as simulation anchors rather
+than as claims that the generated signal is a full physiological model of each
+ERP component @Luck2014. Additional time-varying components generate the
+non-sigmoid pattern families. The noise pool contains pink, white, red, and
+exponential noise, with a separate sampled level for each noise type.
+
+The image part of `ERPGen` is equally important. After raw simulation, the
+pipeline can drop trials, crop the time window, sort trials with a
+pattern-specific rule, apply a Gaussian anti-aliasing low-pass filter before
+downsampling, resize the matrix to the model input resolution, and apply
+timepoint-wise z-scoring. It also creates four deterministic variants of each
+image: normal trial order, reversed trial order, inverted polarity, and reversed
+plus inverted. These variants are meant to discourage the model from treating a
+single polarity or row direction as the definition of the class.
+
+The empirical target was then narrowed to the binary task `sigmoid` versus
+`no_class`. In the real-data matching configuration, the simulation was aligned
+with the fixation-data preprocessing as closely as the current generator
+allowed: the sampling rate was fixed at 512 Hz, the trial count was fixed to
+2508 trials in the small-scale workflows, and the epoch duration was kept close
+to one second so that the generated time axis matched the post-stimulus image
+construction. The simulator still loaded the other pattern components, but only
+the sigmoid sort and the random no-class sort became classifier labels. This
+gives a cleaner test of the intended transfer question than a six-class
+experiment would: can a model trained on simulated sigmoid structure recognise
+the same visual concept in real ERP images?
+
+The central risk is the sim-to-real gap. In simulation-to-real transfer, strong
+synthetic performance does not guarantee real-data performance, because the
+model may learn properties that are specific to the simulator. Domain
+randomisation addresses this risk by varying simulator parameters so that the
+real world appears as one possible variant within a broad synthetic
+distribution @Tobin2017. In this thesis, the same principle is applied to ERP
+images, but with a stricter constraint: if component widths, latency gaps,
+amplitudes, basis shapes, or noise levels are varied too aggressively, the
+target pattern itself becomes implausible or disappears.
+
+The simulator search therefore had two goals: increase variation and remain
+close enough to the real sigmoid morphology. The exposed search space contains
+24 parameter specifications. Because each specification has a mean and a
+standard deviation, the calibration problem becomes 48-dimensional. Three
+sampling strategies were explored. Broad random search directly samples this
+space and serves as a baseline. Latin hypercube sampling spreads candidates
+more evenly across dimensions than ordinary random sampling @McKay1979. Monte
+Carlo random search gives a simple and defensible comparison because random
+search is a strong baseline for high-dimensional hyperparameter spaces
+@Bergstra2012.
+
+Two scoring ideas were then tested. The simulator-first workflow scores
+candidates before full model training by comparing real and simulated sigmoid
+images in a hand-designed feature space. The feature vector includes global
+image standard deviation, mean absolute gradients along time and trial axes,
+local patch-variance statistics, row autocorrelation, gradient concentration,
+interquartile-range trends, and row/column energy variation. The distance score
+combines z-normalised feature differences with a radial-basis-function maximum
+mean discrepancy term, which is a kernel-based way to compare two sample
+distributions @Gretton2012. The model-first workflow skips this proxy and
+scores candidate simulator settings directly by real-data balanced accuracy.
+
+Additional attempts were included because the first simulator settings did not
+close the gap. A heterogeneity experiment increased parameter standard
+deviations to 50%, 100%, and 1000% of the corresponding means to see whether
+broader variation would produce more realistic image diversity. A dense neural
+network with low-pass preprocessing was used as a model-first direct-search
+alternative. These runs are important for the thesis even when they do not
+produce the final model, because they show that the problem is not merely a
+matter of sampling more synthetic examples. The shape and variability of the
+simulated distribution matter.
+
+Self-supervised and semi-supervised learning enter the project as a response to
+this limitation. SimCLR-style contrastive learning trains an encoder by making
+two augmented views of the same image agree while separating representations of
+different images @Chen2020. Confidence-based pseudo-labelling then adds
+unlabelled examples only when the current model predicts a label with high
+confidence, a principle also used in later semi-supervised image methods such
+as FixMatch @Sohn2020. In this thesis, these methods do not replace the
+simulation question. They provide a second way to reduce dependence on
+synthetic labels by learning from unlabelled real ERP images.
 
 == Research Gap and Positioning
-// Close the chapter by stating clearly what is still missing in the literature
-// and where this thesis contributes.
+The gap addressed in this thesis is the lack of a validated path from
+simulation-generated ERP-image labels to reliable pattern recognition in real
+ERP images. ERP-image visualisation makes single-trial structure visible
+@Jung2001, EEG deep learning offers models that can learn from complex inputs
+@Roy2019, and UnfoldSim provides a principled way to generate event-based
+synthetic EEG-like time series @Schepers2025. What remains uncertain is whether
+these pieces can be combined without the classifier learning simulator-specific
+shortcuts.
+
+The thesis therefore contributes an explicit simulation-to-real case study for
+ERP-image pattern detection. It defines the simulated `sigmoid` and `no_class`
+labels operationally, documents how generated time series become model-ready
+ERP images, explores several ways to randomise and calibrate the simulator, and
+then checks the resulting models against manually labelled real ERP images. The
+main scientific question is not whether synthetic data can be classified. The
+simulator can make that task easy. The question is whether the learned visual
+concept survives the move from controlled simulation to real EEG data.
 
 
 // ----------------------------------------------------------------------------
