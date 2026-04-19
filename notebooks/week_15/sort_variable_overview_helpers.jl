@@ -19,8 +19,11 @@ export DEFAULT_OVERVIEW_SORT_COLUMNS
 export DEFAULT_SORT_COLUMN_CANDIDATES
 export load_8bit_overview_data
 export summarize_sort_columns
+export plottable_sort_columns
+export overview_sort_order_audit_df
 export build_sortvar_preview
 export plot_sort_variable_figure
+export plot_all_sort_variable_figures
 
 const OPENNEURO_REPO_DIR = Week15LabelStudioExport.OPENNEURO_REPO_DIR
 const OPENNEURO_DERIVED_DIR = Week15LabelStudioExport.OPENNEURO_DERIVED_DIR
@@ -135,6 +138,46 @@ function summarize_sort_columns(data_bundle; candidates = DEFAULT_SORT_COLUMN_CA
         ))
     end
 
+    return DataFrame(rows)
+end
+
+function plottable_sort_columns(data_bundle; candidates = DEFAULT_SORT_COLUMN_CANDIDATES)
+    summary = summarize_sort_columns(data_bundle; candidates = candidates)
+    return Symbol.(summary.derived_name[summary.should_plot])
+end
+
+function overview_sort_order_audit_df(data_bundle; sort_columns = plottable_sort_columns(data_bundle))
+    events_subset, trial_type_subset = game_events_subset(data_bundle)
+    rows = NamedTuple[]
+    for sort_col in sort_columns
+        sort_col in propertynames(events_subset) || continue
+        for trial_type in unique(trial_type_subset)
+            mask = trial_type_subset .== trial_type
+            events_trials = copy(events_subset[mask, :])
+            nrow(events_trials) == 0 && continue
+            sort_cols = Week15LabelStudioExport.effective_sort_columns(events_trials, sort_col)
+            sort_cols_with_row = vcat(sort_cols, [:__row_idx__])
+            order = Week15LabelStudioExport.trial_sort_order(events_trials, sort_col)
+
+            order_df = DataFrame()
+            order_df[!, :__row_idx__] = collect(1:nrow(events_trials))
+            for col in sort_cols
+                order_df[!, col] = copy(events_trials[!, col])
+            end
+            sort!(order_df, sort_cols_with_row)
+            expected_order = Int.(order_df[!, :__row_idx__])
+
+            push!(rows, (
+                trial_type = String(trial_type),
+                sort_col = String(sort_col),
+                effective_sort_columns = join(string.(sort_cols_with_row), ", "),
+                n_trials = nrow(events_trials),
+                unique_values = length(unique(collect(skipmissing(events_trials[!, sort_col])))),
+                source_guard = length(sort_cols) > 1 && first(sort_cols) != sort_col,
+                status = sort(order) == collect(1:nrow(events_trials)) && order == expected_order ? "ok" : "mismatch",
+            ))
+        end
+    end
     return DataFrame(rows)
 end
 
@@ -291,6 +334,32 @@ function plot_sort_variable_figure(preview)
     resize_to_layout!(fig)
 
     return fig
+end
+
+function plot_all_sort_variable_figures(data_bundle;
+        sort_columns = plottable_sort_columns(data_bundle),
+        n_channels::Int = 2,
+        seed::Int = 15,
+        trial_types = nothing,
+        low_pass_factor::Real = Week15LabelStudioExport.LOWPASS_SIGMA)
+    rows = NamedTuple[]
+    for sort_col in sort_columns
+        preview = build_sortvar_preview(data_bundle;
+            sort_col = sort_col,
+            n_channels = n_channels,
+            seed = seed,
+            trial_types = trial_types,
+            low_pass_factor = low_pass_factor,
+        )
+        display(plot_sort_variable_figure(preview))
+        push!(rows, (
+            sort_col = String(sort_col),
+            n_images = length(preview.images),
+            channels = join([item.channel_name for item in preview.channel_selection], ", "),
+            trial_types = join(preview.trial_types, ", "),
+        ))
+    end
+    return DataFrame(rows)
 end
 
 end

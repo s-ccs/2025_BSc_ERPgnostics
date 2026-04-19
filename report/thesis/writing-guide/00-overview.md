@@ -15,6 +15,7 @@ reference files — they do NOT go into the thesis.
 | `04-common-mistakes.md` | Capitalisation, acronyms, footnotes, definitions, spelling, spaces, pseudo-accuracy |
 | `05-figures-and-data.md` | Chart abuse, units, equations, percentages vs percentage points |
 | `06-citations.md` | Bibliography style, citation rules, BibTeX tips |
+| `07-model-writing-instructions.md` | Practical instructions for future models editing `thesis.typ` and `refs.bib` |
 
 ## Quick Checklist Before Submitting Any Section
 
@@ -24,7 +25,10 @@ reference files — they do NOT go into the thesis.
 - [ ] Every acronym defined before first use
 - [ ] Consistent terminology throughout
 - [ ] Each paragraph has one clear purpose (2-4 sentences)
+- [ ] Reader is led from general intuition to the specific technical topic
 - [ ] Define-before-use: no forward references without brief explanation
 - [ ] Spell-checked
 - [ ] Figures readable, not misleading, properly referenced
 - [ ] All claims backed by data or citations
+- [ ] For model-assisted edits: only `thesis.typ` and `refs.bib` changed unless explicitly requested
+- [ ] No PDF generation unless explicitly requested

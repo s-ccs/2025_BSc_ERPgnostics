@@ -53,6 +53,8 @@ const DEFAULT_GAME_TRIAL_TYPES = [
     "COLLECT_AMMO",
 ]
 const SORT_TIEBREAKER_COLUMNS = [
+    :run,
+    :source_file,
     :epoch_index,
     :sample_index,
     :event_rank_within_type,
@@ -60,6 +62,15 @@ const SORT_TIEBREAKER_COLUMNS = [
     :flash_index_within_trial,
     :onset_s,
     :stimulus_onset_s,
+]
+const LOCAL_WITHIN_RUN_SORT_COLUMNS = Set([
+    :onset_s,
+    :sample_index,
+    :event_rank_within_type,
+])
+const RUN_SORT_COLUMN_CANDIDATES = [
+    :run,
+    :source_file,
 ]
 
 const PANEL_PX = 320
@@ -151,22 +162,45 @@ function sortvalues_from(df::DataFrame, col::Symbol)
     return collect(values)
 end
 
-function trial_sort_order(df::DataFrame, sort_col::Symbol)
-    row_col = :__row_idx__
+function run_sort_column(df::DataFrame)
+    present = propertynames(df)
+    for col in RUN_SORT_COLUMN_CANDIDATES
+        col in present || continue
+        length(unique(collect(skipmissing(df[!, col])))) > 1 || continue
+        return col
+    end
+    return nothing
+end
+
+function effective_sort_columns(df::DataFrame, sort_col::Symbol)
     sort_cols = Symbol[sort_col]
+    if sort_col in LOCAL_WITHIN_RUN_SORT_COLUMNS
+        run_col = run_sort_column(df)
+        if run_col !== nothing && run_col != sort_col
+            sort_cols = Symbol[run_col, sort_col]
+        end
+    end
     for col in SORT_TIEBREAKER_COLUMNS
         col == sort_col && continue
         col in propertynames(df) || continue
+        col in sort_cols && continue
         push!(sort_cols, col)
     end
+    return sort_cols
+end
+
+function trial_sort_order(df::DataFrame, sort_col::Symbol)
+    row_col = :__row_idx__
+    sort_cols = effective_sort_columns(df, sort_col)
+    sort_cols_with_row = vcat(sort_cols, [row_col])
 
     order_df = DataFrame()
     order_df[!, row_col] = collect(1:nrow(df))
     for col in sort_cols
-        order_df[!, col] = df[!, col]
+        order_df[!, col] = copy(df[!, col])
     end
 
-    sort!(order_df, sort_cols)
+    sort!(order_df, sort_cols_with_row)
     return Int.(order_df[!, row_col])
 end
 

@@ -29,7 +29,7 @@ import pandas as pd
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT_ROOT = REPO_ROOT / "notebooks" / "datasets"
-DEFAULT_COMPONENTS = ("p3", "n170")
+DEFAULT_COMPONENTS = ("p3", "n170", "lrp")
 DEFAULT_SUBJECTS = (1, 2, 3, 4)
 
 MNE_EEGLAB_DOCS = "https://mne.tools/stable/generated/mne.read_epochs_eeglab.html"
@@ -60,6 +60,7 @@ class ComponentConfig:
     requires_response: bool = True
     root_named_files: tuple[str, ...] = ()
     behavior_named_files: tuple[str, ...] = ()
+    known_missing_subject_ids: tuple[int, ...] = ()
 
     @property
     def output_dirname(self) -> str:
@@ -201,7 +202,7 @@ COMPONENTS: dict[str, ComponentConfig] = {
         epoch_fdt_template="{sid}_LRP_shifted_ds_reref_ucbip_hpfilt_ica_corr_cbip_elist_bins_epoch_interp_ar.fdt",
         eventlist_template="{sid}_LRP_Eventlist_For_RTs.txt",
         recommended_sort_columns=("reaction_time_ms", "condition", "stimulus_code", "epoch_index"),
-        preferred_channels=("C3", "C4", "FC3", "FC4"),
+        preferred_channels=("Cz", "CPz", "C3", "C4", "FCz"),
         example_source_relpaths=(
             "source/LRP_All_Data_and_Scripts/Behavior_Measurements/Script14_Calculate_RTs_and_Accuracy.m",
             "source/LRP_All_Data_and_Scripts/EEG_ERP_Processing/Script6_Artifact_Rejection.m",
@@ -216,6 +217,7 @@ COMPONENTS: dict[str, ComponentConfig] = {
             "LRP_Event_Code_Scheme.xlsx",
         ),
         behavior_named_files=("BDF_LRP_RTs.txt", "Script14_Calculate_RTs_and_Accuracy.m"),
+        known_missing_subject_ids=(2,),
     ),
     "ern": ComponentConfig(
         key="ern",
@@ -353,7 +355,7 @@ def component_specific_extras(config: ComponentConfig, stimulus_code: int) -> di
     return {}
 
 
-def parse_eventlist_for_rt(path: Path, bin_labels: dict[int, str], config: ComponentConfig) -> list[dict[str, Any]]:
+def read_eventlist_rows(path: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     with path.open("r", encoding="utf-8", errors="replace") as handle:
         for line in handle:
@@ -384,7 +386,11 @@ def parse_eventlist_for_rt(path: Path, bin_labels: dict[int, str], config: Compo
                     "bins": bins,
                 }
             )
+    return rows
 
+
+def parse_eventlist_for_rt(path: Path, bin_labels: dict[int, str], config: ComponentConfig) -> list[dict[str, Any]]:
+    rows = read_eventlist_rows(path)
     stimuli: list[dict[str, Any]] = []
     for idx, row in enumerate(rows[:-1]):
         if row["bepoch"] <= 0:
@@ -434,41 +440,75 @@ def parse_eventlist_for_rt(path: Path, bin_labels: dict[int, str], config: Compo
     return stimuli
 
 
+def parse_lrp_eventlist_for_rt(
+    path: Path,
+    bin_labels: dict[int, str],
+    config: ComponentConfig,
+) -> list[dict[str, Any]]:
+    rows = read_eventlist_rows(path)
+    events: list[dict[str, Any]] = []
+    for idx, row in enumerate(rows):
+        if row["bepoch"] <= 0 or not row["bins"]:
+            continue
+        if idx == 0:
+            raise RuntimeError(f"LRP response item {row['item']} in {path} has no preceding stimulus row")
+        stimulus = rows[idx - 1]
+        if stimulus["bepoch"] != 0:
+            raise RuntimeError(
+                f"LRP response item {row['item']} in {path} is not preceded by a continuous stimulus event"
+            )
+
+        stimulus_code = int(stimulus["ecode"])
+        response_code = int(row["ecode"])
+        if stimulus_code not in {11, 12, 21, 22}:
+            raise RuntimeError(
+                f"Unexpected LRP stimulus code {stimulus_code} before response item {row['item']} in {path}"
+            )
+        if response_code not in {111, 121, 212, 222}:
+            raise RuntimeError(
+                f"Unexpected LRP response code {response_code} at response item {row['item']} in {path}"
+            )
+
+        candidate_bins = [b for b in row["bins"] if b in bin_labels]
+        if not candidate_bins:
+            continue
+        # Bins 1-2 are all-trial response side bins; bins 3-6 preserve compatibility.
+        bin_id = int(next((b for b in candidate_bins if b not in {1, 2}), candidate_bins[0]))
+        bin_label = bin_labels.get(bin_id, f"bin {bin_id}")
+        condition_label, accuracy_label = split_bin_label(bin_label)
+        condition = condition_label or bin_label
+        response_side = "left" if response_code in {111, 121} else "right"
+        flanker_compatibility = (
+            "compatible" if stimulus_code in {11, 12} else "incompatible"
+        )
+
+        event_row = {
+            "epoch_index": int(row["bepoch"]),
+            "bin_id": bin_id,
+            "bin_label": bin_label,
+            "stimulus_code": stimulus_code,
+            "response_code": response_code,
+            "reaction_time_ms": float(row["diff_ms"]),
+            "condition": condition,
+            "accuracy": accuracy_label.lower() if accuracy_label else "correct",
+            "stimulus_onset_s": float(stimulus["onset_s"]),
+            "response_onset_s": float(row["onset_s"]),
+            "source_event_item": int(row["item"]),
+            "response_side": response_side,
+            "flanker_compatibility": flanker_compatibility,
+        }
+        events.append(event_row)
+
+    events.sort(key=lambda event: int(event["epoch_index"]))
+    return events
+
+
 def parse_eventlist_without_response(
     path: Path,
     bin_labels: dict[int, str],
     config: ComponentConfig,
 ) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    with path.open("r", encoding="utf-8", errors="replace") as handle:
-        for line in handle:
-            match = EVENT_LINE_RE.match(line)
-            if not match:
-                continue
-            (
-                item,
-                bepoch,
-                ecode,
-                _label,
-                onset_s,
-                _diff_ms,
-                _dura_ms,
-                _b_flags,
-                _a_flags,
-                _enable,
-                bins_raw,
-            ) = match.groups()
-            bins = [int(token) for token in bins_raw.split()] if bins_raw.strip() else []
-            rows.append(
-                {
-                    "item": int(item),
-                    "bepoch": int(bepoch),
-                    "ecode": int(ecode),
-                    "onset_s": float(onset_s),
-                    "bins": bins,
-                }
-            )
-
+    rows = read_eventlist_rows(path)
     events: list[dict[str, Any]] = []
     for row in rows:
         stimulus_code = int(row["ecode"])
@@ -585,6 +625,7 @@ def build_component_dataset(config: ComponentConfig, output_root: Path, subject_
 
     events_rows: list[dict[str, Any]] = []
     subject_trial_counts: list[dict[str, Any]] = []
+    processed_subject_ids: list[int] = []
 
     h5_path = output_dir / "epochs.hdf5"
     events_path = output_dir / "events.csv"
@@ -603,6 +644,11 @@ def build_component_dataset(config: ComponentConfig, output_root: Path, subject_
         for subject_id in subject_ids:
             subject_item = subject_items.get(subject_id)
             if subject_item is None:
+                if subject_id in config.known_missing_subject_ids:
+                    print(
+                        f"  [warn] {config.title} subject {subject_id} is absent from the OSF listing; skipping"
+                    )
+                    continue
                 raise FileNotFoundError(f"Subject {subject_id} missing in {config.title} listing")
 
             subject_source_dir = source_root / "subjects" / subject_label(subject_id)
@@ -629,7 +675,9 @@ def build_component_dataset(config: ComponentConfig, output_root: Path, subject_
             else:
                 bin_labels = parse_bin_labels(eventlist_path)
 
-            if config.requires_response:
+            if config.key == "lrp":
+                event_rows = parse_lrp_eventlist_for_rt(eventlist_path, bin_labels, config)
+            elif config.requires_response:
                 event_rows = parse_eventlist_for_rt(eventlist_path, bin_labels, config)
             else:
                 event_rows = parse_epochs_without_response(epochs, config)
@@ -656,6 +704,7 @@ def build_component_dataset(config: ComponentConfig, output_root: Path, subject_
             subject_trial_counts.append(
                 {"subject_label": subject_key, "n_trials": int(len(epochs))}
             )
+            processed_subject_ids.append(subject_id)
 
             for event in event_rows:
                 row = {
@@ -694,7 +743,7 @@ def build_component_dataset(config: ComponentConfig, output_root: Path, subject_
         "source_root_listing": config.root_listing_url,
         "source_processing_scripts": config.github_component_url,
         "reader_docs": MNE_EEGLAB_DOCS,
-        "selected_subjects": [subject_label(subject_id) for subject_id in subject_ids],
+        "selected_subjects": [subject_label(subject_id) for subject_id in processed_subject_ids],
         "preferred_channels": list(config.preferred_channels),
         "recommended_sort_columns": list(config.recommended_sort_columns),
         "hdf5_path": h5_path.name,

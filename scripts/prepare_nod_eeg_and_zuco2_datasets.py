@@ -230,10 +230,23 @@ def build_nod_eeg_bundle(
 # ---------------------------------------------------------------------------
 
 ZUCO2_DATASET_KEY = "zuco2_nr_public"
-ZUCO2_COMPONENT = "ZuCo2 Reading"
+ZUCO2_COMPONENT = "ZuCo2 Reading Fixations"
 ZUCO2_SOURCE_URL = "https://osf.io/2urht/"
-ZUCO2_PREFERRED_CHANNELS = ["E11", "E6", "E62", "E75"]  # Fz, FCz, Pz, POz equivalents in GSN128
+ZUCO2_PREFERRED_CHANNELS = [
+    "E8",
+    "E14",
+    "E21",
+    "E25",
+    "E126",
+    "E127",
+    "E128",
+    "E11",
+    "E6",
+    "E62",
+    "E75",
+]  # GSN128 face/peripheral electrodes first, then Fz/FCz/Pz/POz equivalents.
 ZUCO2_RECOMMENDED_SORT = [
+    "fixation_duration_ms",
     "FFD_ms",
     "GD_ms",
     "TRT_ms",
@@ -430,8 +443,10 @@ def build_zuco2_bundle(
     metadata_path = output_dir / "metadata.json"
 
     SFREQ = 500.0  # ZuCo sampling rate
-    EPOCH_SAMPLES = 500  # 1 second at 500 Hz: -200ms to +800ms
-    PRE_SAMPLES = 100    # 200ms pre-stimulus
+    EPOCH_TMIN_S = -0.5
+    EPOCH_DURATION_S = 1.5
+    EPOCH_SAMPLES = int(round(SFREQ * EPOCH_DURATION_S))
+    PRE_SAMPLES = int(round(abs(EPOCH_TMIN_S) * SFREQ))
 
     all_events: list[dict] = []
     subject_trial_counts: list[dict] = []
@@ -519,8 +534,8 @@ def build_zuco2_bundle(
             ch_names = [f"E{i+1}" for i in range(most_common_nch)]
             ch_names_h5 = np.asarray(ch_names, dtype=h5py.string_dtype(encoding="utf-8"))
 
-            # Time axis: -200ms to +800ms at 500 Hz
-            times_s = np.linspace(-PRE_SAMPLES / SFREQ, (EPOCH_SAMPLES - PRE_SAMPLES - 1) / SFREQ, EPOCH_SAMPLES).astype(np.float32)
+            # Time axis: -500ms to +998ms at 500 Hz.
+            times_s = np.linspace(EPOCH_TMIN_S, (EPOCH_SAMPLES - PRE_SAMPLES - 1) / SFREQ, EPOCH_SAMPLES).astype(np.float32)
 
             # Build event rows
             for trial_idx, meta in enumerate(all_word_meta[:n_trials]):
@@ -535,6 +550,9 @@ def build_zuco2_bundle(
                     row["FFD_ms"] = meta["FFD"]
                 if "GD" in meta and not np.isnan(meta["GD"]):
                     row["GD_ms"] = meta["GD"]
+                    row["fixation_duration_ms"] = meta["GD"]
+                elif "FFD" in meta and not np.isnan(meta["FFD"]):
+                    row["fixation_duration_ms"] = meta["FFD"]
                 if "TRT" in meta and not np.isnan(meta["TRT"]):
                     row["TRT_ms"] = meta["TRT"]
                 if "nFixations" in meta and not np.isnan(meta["nFixations"]):
@@ -584,15 +602,16 @@ def build_zuco2_bundle(
         "source_processing_scripts": "https://github.com/norahollenstein/zuco-benchmark",
         "reader_docs": "https://osf.io/cqa8j/wiki/Data%20format/",
         "selected_subjects": [f"sub-{s}" for s in subjects],
-        "preferred_channels": ZUCO2_PREFERRED_CHANNELS[:4],
+        "preferred_channels": ZUCO2_PREFERRED_CHANNELS,
         "recommended_sort_columns": sort_cols if sort_cols else ZUCO2_RECOMMENDED_SORT[:4],
         "hdf5_path": "epochs.hdf5",
         "events_csv_path": "events.csv",
         "notes": [
             "Source .mat files are the official ZuCo 2.0 preprocessed release from OSF.",
             "Preprocessing: bandpass 0.5-30Hz, ICA artifact removal via MARA, average re-reference.",
-            "Word-level epochs extracted from sentenceData structures, cropped/padded to [-200, +800] ms.",
-            "Sort variables: FFD (First Fixation Duration), GD (Gaze Duration), TRT (Total Reading Time), nFixations, word_length.",
+            "Word-level/fixation-related epochs extracted from sentenceData structures, cropped/padded to [-500, +1000] ms.",
+            "The notebook path should disable baseline correction, matching fixation-locked sources where the prior saccade can sit in the baseline interval.",
+            "Sort variables: fixation_duration_ms (GD when present, otherwise FFD), FFD, GD, TRT, nFixations, word_length.",
         ],
         "official_source_examples": {},
         "subject_trial_counts": subject_trial_counts,

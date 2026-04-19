@@ -39,6 +39,9 @@ docs/site/
 *.hdf5
 *.csv
 *.png
+*.eeg
+*.vhdr
+*.vmrk
 *.fdt
 *.set
 *.xlsx
@@ -47,3 +50,7 @@ docs/site/
 *.fif
 *.edf
 *.pdf
+
+# Week 19 generated downloads and JSON metadata
+/notebooks/week_19/**/*.json
+/notebooks/week_19/downloads/

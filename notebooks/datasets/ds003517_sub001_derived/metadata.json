@@ -80,5 +80,39 @@
       "trial_type": "SHOOT_BUTTON",
       "count": 1382
     }
+  ],
+  "dataset_key": "ds003517_sub001_derived",
+  "component": "OpenNeuro ds003517 8-bit gameplay events",
+  "source_component": "https://openneuro.org/datasets/ds003517",
+  "source_root_listing": "https://openneuro.org/datasets/ds003517",
+  "source_processing_scripts": "scripts/prepare_openneuro_8bit_dataset.py",
+  "reader_docs": "https://mne.tools/stable/generated/mne.io.read_raw_eeglab.html",
+  "selected_subjects": [
+    "sub-001"
+  ],
+  "preferred_channels": [
+    "Cz",
+    "FCz",
+    "Pz",
+    "Oz"
+  ],
+  "recommended_sort_columns": [
+    "onset_s",
+    "sample_index",
+    "event_rank_within_type",
+    "epoch_index",
+    "trial_type_slug"
+  ],
+  "hdf5_path": "epochs.hdf5",
+  "events_csv_path": "events.csv",
+  "subject_trial_counts": [
+    {
+      "subject_label": "sub-001",
+      "n_trials": 4125
+    }
+  ],
+  "notes": [
+    "Derived from OpenNeuro ds003517 sub-001 runs 1-2.",
+    "The HDF5 keeps the original root datasets and also exposes subjects/sub-001 for the shared Week 15 helpers."
   ]
 }

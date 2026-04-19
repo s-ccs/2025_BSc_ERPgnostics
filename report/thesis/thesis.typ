@@ -588,28 +588,67 @@
 = Introduction <chp:introduction>
 
 == Motivation
-If we want to understand how the brain reacts to what a person sees, hears, or
-does, we need measurements that are fast, practical, and repeatable. EEG is
-one such method: it records electrical activity at the scalp, and ERPs are
-patterns that become visible when we align those recordings to repeated events.
-For the purpose of this introduction, this rough intuition is enough. Chapter 2
-explains both concepts more carefully. ERPs remain widely used in human
-neuroscience, and the literature now spans a broad range of paradigms and
-application areas @Kappenman2021 @Donoghue2022.
+When a person sees a stimulus, reads a word, moves their eyes, or presses a
+button, the brain response changes within fractions of a second. To study such
+fast processes, we need a measurement that follows brain activity on the same
+time scale. Electroencephalography (EEG) does this by recording electrical
+activity from the scalp. For this introduction, this simple idea is enough;
+Chapter 2 defines the terms more carefully.
 
-As soon as these experiments become larger, the analysis problem changes.
-Researchers may have many recordings, but deciding which patterns are
-meaningful still takes time and expert judgment. This is why automation is
-attractive: deep learning can learn structured patterns from complex signals,
-but it still depends on labelled examples that are rarely available at the same
-scale as the raw recordings @Roy2019.
+The raw EEG signal is difficult to interpret because each single trial contains
+both the response of interest and a large amount of unrelated activity. A common
+solution is to repeat the same type of event many times, align the EEG to that
+event, and average the trials. The result is an event-related potential (ERP).
+This averaging approach is still central in human neuroscience, and ERP
+research now spans many components, tasks, and application areas
+@Kappenman2021 @Donoghue2022.
 
-This thesis starts from that bottleneck. Instead of waiting for large manually
-annotated datasets, we use data simulation to create labelled ERP images under
-controlled assumptions. Tools such as UnfoldSim.jl make that possible and shift
-the central question to the point that matters in practice: can a model
-trained on ERP images from data simulation still recognise the relevant
-sigmoid pattern in real recordings @Schepers2025.
+Averaging is useful, but it also hides information. Two datasets can have a
+similar average even if the individual trials behave very differently. A
+component may be present on most trials but appear blurred because its timing
+changes. A response may be linked more closely to a later button press or the
+next fixation than to the event used for alignment. Different trial subtypes
+can also cancel each other when they are averaged too early
+@Jung2001 @Ouyang2017LatencyVariabilityReview.
+
+ERP images keep this missing structure visible. Instead of reducing all trials
+to one waveform, they show the data as an image: rows are trials, columns are
+time points, and colour represents signal amplitude. If the rows are sorted by
+a meaningful variable, such as reaction time, fixation duration, or trial
+order, structure across trials can become visible. A curved band may indicate
+response-locked activity, a fan may indicate increasing timing variability, and
+a vertical split may indicate a condition difference.
+
+This visual structure is useful, but it still needs care. In eye-tracking EEG,
+for example, neighbouring fixations and saccades can overlap with the analysed
+response. A pattern in an ERP image can therefore be a clue to a cognitive
+effect, to event overlap, or to a preprocessing issue. This is why ERP images
+are best treated as a first diagnostic view, often followed by more explicit
+overlap modelling or regression-based analysis @Dimigen2011Coregistration
+@Ehinger2019Unfold.
+
+The practical problem is scale. A researcher can inspect a few ERP images by
+hand, but the number grows quickly with subjects, channels, conditions, and
+sorting variables. Manual judgement is also hard to reproduce unless the
+criteria are written down and applied consistently. Automated pattern
+recognition is attractive because it can turn this slow visual screening step
+into a consistent first pass. It does not replace interpretation; it helps
+decide where interpretation should start.
+
+This thesis focuses on that first pass. The goal is to detect interpretable
+ERP-image morphology, not to explain the underlying brain process
+automatically. The main experiments narrow the task to `sigmoid` versus
+`no_class`, while the broader pattern vocabulary remains important for
+simulation and annotation. Deep learning is a plausible tool for this
+image-based task, but it needs labelled examples, and those labels are costly
+to create manually @Roy2019.
+
+The project therefore uses simulation to create labelled training data under
+controlled assumptions. UnfoldSim.jl provides a principled basis for simulating
+continuous event-based EEG-like time series, which can then be rendered as ERP
+images @Schepers2025. The central question follows directly from this setup:
+can a model trained on simulated ERP-image structure recognise the same kind of
+sigmoid pattern in manually labelled real data?
 
 == Research Questions and Contributions
 // State the main research question, sketch the sim-to-real idea at a high
@@ -688,16 +727,76 @@ change; a categorical split can become two visually distinct blocks. ERP images
 therefore preserve more information than a single averaged ERP waveform while
 still giving a compact visual summary.
 
-In this thesis, the central positive class is not any ERP component in general
-but a specific ERP-image shape: the `sigmoid` pattern. Operationally, an image
-is treated as sigmoid-like when a connected S-shaped band extends across time
-while moving smoothly across the sorted trial axis. The label is therefore tied
-to a relation between three elements: the time course of the ERP response, the
-variable used to order the trials, and the visual continuity of the band. This
-distinction matters for the later simulation. A single simulated time-by-trial
-matrix can produce several different ERP images, and therefore several
-different apparent pattern classes, if the trials are sorted by different event
-variables.
+The next section uses this idea to define the ERP image patterns that appear in
+the simulation and annotation workflow. The later experiments narrow the
+classification task to `sigmoid` versus `no_class`, but that narrower task is
+easier to understand after the broader pattern vocabulary is clear.
+
+== ERP Image Patterns
+The six pattern names used in this thesis are a practical vocabulary for visible
+structure in ERP images. They are not six separate brain components. Sorting can
+make different mechanisms visible: a component may shift in time, spread out
+with variable duration, change polarity, or vary non-linearly across the trial
+stack @Jung2001 @Delorme2004EEGLAB @Delorme2015GrandERPImage. The six labels
+were chosen because they cover these main cases while staying distinct enough
+for manual annotation.
+
+In prose, the thesis uses readable names: sigmoid, diverging bar, one-sided
+fan, hourglass, two-sided fan, and tilted bar. In code and annotation files,
+the same labels are written as `sigmoid`, `diverging_bar`, `one_sided_fan`,
+`hourglass`, `two_sided_fan`, and `tilted_bar`. This keeps the simulator,
+manual labels, and classifier outputs consistent. It also makes `no_class`
+clearer: it means that no coherent target pattern is visible, not merely that
+the image is not sigmoid-like.
+
+A `sigmoid` is a smooth, curved diagonal band. It often appears when epochs are
+aligned to one event, but the relevant activity follows a later event, such as
+a response, decision, or next fixation. In reaction-time-sorted ERP images,
+early sensory activity can stay vertical while later positive activity follows
+the response @Jung2001. In fixation-related data, a similar curve may also come
+from overlap with neighbouring fixations, so the shape is a clue rather than a
+finished interpretation @Dimigen2021RegressionEyeTrackingEEG.
+
+A `tilted_bar` is a straight diagonal band. It has the same general origin as a
+sigmoid, but the relation between trial order and component latency is roughly
+linear. This may reflect response latency, trial order, fatigue, practice, or a
+neighbouring event that shifts through the epoch. The visual label therefore
+says that timing changes systematically; it does not decide why.
+
+A `one_sided_fan` is narrow at one end of the trial stack and wider at the
+other. This is expected when one boundary of the response is anchored, while
+the other boundary depends on duration or on the timing of a following event.
+Eye-tracking EEG is a typical case: variable fixation durations can create
+duration-dependent overlap between successive fixation-related responses
+@Dimigen2011Coregistration @Ehinger2019Unfold.
+
+A `two_sided_fan` widens toward both extremes of the sorted stack. The component
+usually keeps the same sign, but its timing is less stable for low and high
+values of the sorting variable than near the middle. This fits the broader ERP
+literature on trial-to-trial latency jitter, where variable component timing can
+broaden averaged ERPs and hide sharper single-trial structure
+@Ouyang2017LatencyVariabilityReview.
+
+A `diverging_bar` is a mostly vertical band whose colour reverses across the
+ordered trials. The timing is therefore fairly stable, but the sign changes
+with the sorting variable. This can happen when trials are ordered by a signed
+covariate, by prestimulus phase, or by conditions with opposite scalp polarity
+@Haig1998AlphaPhaseP3 @Ritter2009PhaseSortingCaveats. In visual ERPs, polarity
+can also depend on stimulus position and source geometry, as shown for early
+retinotopic components @Capilla2016RetinotopicMapping.
+
+An `hourglass` is a pinched or crossover-like pattern. It is usually not a
+single canonical ERP mechanism, but a warning that the relation may be
+non-linear, mixed across subgroups, or affected by overlap. This is the kind of
+case where regression-based ERP or fixation-related potential analysis is more
+appropriate than interpretation by eye alone @Ehinger2019Unfold
+@Dimigen2021RegressionEyeTrackingEEG.
+
+The later experiments focus on `sigmoid` versus `no_class`, but the full
+six-pattern vocabulary matters. It defines what counts as meaningful ERP image
+morphology before the classifier is trained. The model is therefore evaluated
+as a detector of visible ERP image structure, not as an automatic explanation
+of the underlying neural process.
 
 == CNN-Based Pattern Detection in ERP Data
 Convolutional neural networks are designed to learn local filters and combine
@@ -844,24 +943,64 @@ as FixMatch @Sohn2020. In this thesis, these methods do not replace the
 simulation question. They provide a second way to reduce dependence on
 synthetic labels by learning from unlabelled real ERP images.
 
-== Research Gap and Positioning
-The gap addressed in this thesis is the lack of a validated path from
-simulation-generated ERP-image labels to reliable pattern recognition in real
-ERP images. ERP-image visualisation makes single-trial structure visible
-@Jung2001, EEG deep learning offers models that can learn from complex inputs
-@Roy2019, and UnfoldSim provides a principled way to generate event-based
-synthetic EEG-like time series @Schepers2025. What remains uncertain is whether
-these pieces can be combined without the classifier learning simulator-specific
-shortcuts.
+== Related Work and Positioning
+The closest related work starts with single-trial ERP analysis. Grand averages
+remain useful summaries, but they can hide latency jitter, response subtypes,
+and systematic links between EEG and behaviour. ERP images and related
+single-trial methods address this by keeping trial-wise structure visible
+instead of reducing it to one waveform @Jung2001
+@Pernet2011SingleTrialWhyBother @Ouyang2017LatencyVariabilityReview. This
+thesis uses the same idea, but turns the visual inspection step into a
+classification problem.
 
-The thesis therefore contributes an explicit simulation-to-real case study for
-ERP-image pattern detection. It defines the simulated `sigmoid` and `no_class`
-labels operationally, documents how generated time series become model-ready
-ERP images, explores several ways to randomise and calibrate the simulator, and
-then checks the resulting models against manually labelled real ERP images. The
-main scientific question is not whether synthetic data can be classified. The
-simulator can make that task easy. The question is whether the learned visual
-concept survives the move from controlled simulation to real EEG data.
+A second line of related work studies how overlapping events should be handled
+in naturalistic EEG. In reading and free viewing, fixations and saccades occur
+close together, so the response to one event can overlap with the response to
+the next. Regression-based tools such as Unfold model this problem explicitly
+@Dimigen2011Coregistration @Ehinger2019Unfold
+@Dimigen2021RegressionEyeTrackingEEG. This matters here because a visible ERP
+image pattern can reflect cognitive timing, event overlap, or both.
+
+Deep learning provides the modelling background. CNNs have already been used
+successfully for EEG decoding and for P300 detection, and EEG-specific models
+such as DeepConvNet and EEGNet show that convolutional architectures can learn
+useful temporal and spatial filters from electrophysiological data
+@Cecotti2011P300CNN @Schirrmeister2017DeepConvNet @Lawhern2018EEGNet. The
+present task is different. The model does not predict a stimulus class or a BCI
+command, but whether an ERP image contains a named visual morphology.
+
+The data regime is also different from most supervised EEG classification.
+Manual labels for ERP image morphology are expensive because a person must
+inspect an image and decide whether a pattern is present. Label Studio provides
+a practical environment for that workflow, but the labels still depend on human
+judgement @LabelStudio. This makes annotation quality important: agreement
+statistics are needed when several raters label ambiguous visual categories
+@Artstein2008InterCoderAgreement @Hallgren2012InterRaterKappa.
+
+Simulation is one way to reduce this label bottleneck. EEG simulation tools
+such as SEREEGA and UnfoldSim show that event-related EEG-like data can be
+generated under controlled assumptions @Krol2018SEREEGA @Schepers2025. The
+central risk is that a model trained on synthetic images may learn simulator
+shortcuts instead of a pattern that also exists in real recordings. This is the
+same broad problem addressed by sim-to-real transfer and domain adaptation:
+the source and target distributions must be close enough for the learned
+representation to transfer @Tobin2017 @Ganin2016DANN.
+
+Self-supervised and semi-supervised learning offer a complementary path. Instead
+of relying only on labelled synthetic images, an encoder can learn from
+unlabelled ERP images and then use the smaller labelled set more efficiently.
+This idea is well established in computer vision through contrastive learning
+and pseudo-labelling, and it has also been explored directly for EEG
+representations @Chen2020 @Sohn2020 @Banville2021SelfSupervisedEEG.
+
+Taken together, the literature provides the pieces needed for this thesis:
+ERP images make trial-wise structure visible, CNNs can learn from
+electrophysiological inputs, simulation can provide labelled examples, and
+semi-supervised methods can exploit unlabelled data. What is still missing is a
+validated path that combines these pieces for ERP-image morphology itself. The
+contribution of this thesis is therefore a focused simulation-to-real case
+study: train on simulated `sigmoid` and `no_class` ERP images, then test whether
+the learned visual concept survives in manually labelled real ERP images.
 
 
 // ----------------------------------------------------------------------------
@@ -990,6 +1129,67 @@ TODO MORE DATA
 
 
 == Limitations
+The main limitation of this thesis is the sim-to-real gap. The simulator can
+generate labelled ERP images in large numbers, but it can only generate the
+kind of variability that was built into it. Real EEG also contains
+subject-specific responses, non-stationary noise, artefacts, imperfect event
+timing, and preprocessing effects. This means that strong performance on
+synthetic images is not enough to show that the model has learned a real
+ERP-image pattern @Krol2018SEREEGA @Schepers2025. The weak first direct
+transfer result should therefore be read as a genuine limitation of the setup,
+not just as a tuning problem.
+
+A related risk is shortcut learning. CNNs often use whichever visual regularity
+is easiest for the training objective, even if that regularity is not the
+intended concept @Geirhos2020ShortcutLearning. In this project, such shortcuts
+could come from simulator-specific smoothness, noise texture, colour scaling,
+or unusually clean pattern boundaries. Domain randomisation is meant to reduce
+that risk by varying the synthetic world, but it cannot remove it completely
+@Tobin2017. If randomisation is too narrow, the model overfits to the
+simulator. If it is too broad, the target pattern itself becomes unrealistic.
+
+The manual labels are another limitation. The real-data evaluation uses only a
+limited number of manually labelled ERP images, and visual pattern labels are
+not as objective as event markers or stimulus classes. Borderline cases can
+reasonably be judged differently, especially when a weak sigmoid, a tilted bar,
+or noisy overlap structure appear in the same image. Reliability measures are
+normally used to quantify such disagreement when several raters label the same
+material @Artstein2008InterCoderAgreement @Hallgren2012InterRaterKappa. Without
+that type of agreement analysis, disagreement between the classifier and the
+labels cannot always be interpreted as model error alone.
+
+The interpretation of a detected pattern is also limited. An ERP image can show
+a clear visual structure without revealing its cause. A sigmoid-like band may
+reflect a response-locked component, overlap from a neighbouring fixation, a
+sorting artefact, or a preprocessing choice. Work on fixation-related potentials
+and regression-based overlap correction shows that event overlap can change ERP
+morphology substantially @Dimigen2011Coregistration @Ehinger2019Unfold
+@Dimigen2021RegressionEyeTrackingEEG. The classifier in this thesis sees only
+the final image. It can detect morphology, but it cannot explain the underlying
+neurocognitive mechanism.
+
+The results are also conditional on the chosen preprocessing pipeline. Sorting,
+z-scoring, smoothing, resizing, cropping, and channel construction all change
+the image seen by the CNN. This is not a minor technical detail: ERP methods
+research shows that reasonable processing choices can lead to different
+measurements and conclusions @Clayson2021ERPMultiverse. In the experiments,
+resolution, filtering, and channel variants also changed performance. The
+reported metrics therefore describe one concrete representation pipeline, not
+an intrinsic property of ERP images in general.
+
+Finally, the empirical scope is deliberately narrow. The main task is binary:
+`sigmoid` versus `no_class`. This makes the sim-to-real question easier to test,
+but it does not establish performance for the full six-pattern vocabulary. The
+negative class also mixes many different cases: random trial order, weak
+patterns, noisy images, and possible non-sigmoid structures. As a result, the
+current results cannot tell us whether the model would separate sigmoid from
+hourglass, fan, or tilted-bar patterns in a multiclass setting.
+
+These limitations do not make the study uninformative. They define what its
+results can support. The thesis evaluates whether a simulated visual concept
+can survive a first transfer to real labelled ERP images. It does not yet prove
+general ERP-image pattern recognition across subjects, sessions, datasets, or
+all possible pattern families.
 
 == Future Work
 
