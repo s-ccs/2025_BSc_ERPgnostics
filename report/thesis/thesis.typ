@@ -710,6 +710,14 @@ the horizontal axis is time, the vertical axis is trial number, and the colour
 at each cell encodes the voltage amplitude for one trial at one time point
 @Jung2001.
 
+A recent survey of ERP visualisation practice anchors this terminology in the
+broader field. Mikheev et al. describe ERP data as a high-dimensional array over
+sensors, time, conditions, subjects, and trials, and treat the ERP image as one
+of eight common plot types for ERP and regression-based ERP results
+@Mikheev2024ArtOfBrainwaves. The same survey reports that naming is not fully
+consistent across ERP plot types, which is why this thesis uses the term *ERP
+image* explicitly and consistently @Mikheev2024ArtOfBrainwaves.
+
 The construction of an ERP image in this thesis follows the same conceptual
 pipeline as the project proposal: EEG/ERP recording first, ERP images second,
 pattern detection third. Starting from continuous EEG, the pipeline selects a
@@ -807,6 +815,14 @@ neighbouring trial rows, and finally larger connected shapes. A CNN is therefore
 a plausible model for the same type of judgement made during manual labelling:
 does the image contain a coherent pattern rather than unrelated local patches?
 
+This image-based framing has a useful precedent outside EEG. Magnostics ranks
+adjacency-matrix views by visual motifs and evaluates hand-engineered
+descriptors for this task @Behrisch2017Magnostics. The analogy is narrow but
+useful: an ERP image is also an ordered matrix whose interpretable content can
+appear or disappear when rows are reordered. This thesis uses a CNN instead of a
+fixed descriptor library, but the model still operates on a particular ordered
+visual representation.
+
 The limitation is that an ERP image is not a natural photograph. The horizontal
 axis is time, the vertical axis is a sorted trial index, and the pixel values
 come from a preprocessed electrophysiological signal. Sorting, z-scoring,
@@ -817,6 +833,15 @@ design, and reproducibility @Roy2019. For this thesis, this means that a strong
 CNN score is not automatically evidence of a neurophysiological pattern. It may
 also indicate that the model has learned a simulator artefact, a preprocessing
 artefact, or a dataset-specific shortcut.
+
+Biomedical imaging makes the same point from a different direction. nnU-Net uses
+U-Net-like templates but configures preprocessing, network structure, training,
+and post-processing from dataset properties and validation results
+@Isensee2021nnUNet. Brain-RetinaNet, in a small MRI tumour-detection setting,
+also treats augmentation as a central response to limited labelled data
+@Iqbal2026BrainRetinaNet. For this thesis, the transferable point is not the
+medical task itself, but the priority given to data representation,
+augmentation, and pipeline configuration around a standard convolutional model.
 
 The empirical task is therefore deliberately narrow. The model receives one
 single-channel ERP image and predicts one of two labels: `sigmoid` or
@@ -953,6 +978,14 @@ instead of reducing it to one waveform @Jung2001
 thesis uses the same idea, but turns the visual inspection step into a
 classification problem.
 
+Recent ERP visualisation survey work confirms that this inspection step is still
+mainly treated as a plotting and software-practice problem. Mikheev et al. study
+plot types, tools, naming, sorting, colour maps, and uncertainty displays, rather
+than automated screening algorithms @Mikheev2024ArtOfBrainwaves. The present
+thesis therefore sits between ERP visualisation practice and machine-learning
+screening: it does not propose another ERP plot type, but asks whether an
+existing plot type can become a reproducible classification input.
+
 A second line of related work studies how overlapping events should be handled
 in naturalistic EEG. In reading and free viewing, fixations and saccades occur
 close together, so the response to one event can overlap with the response to
@@ -1018,7 +1051,11 @@ while an ERP CORE P3 derivative has been prepared as an unseen cross-domain
 dataset with per-subject epochs and reaction times @Kappenman2021. MORE TO COME
 
 The manual labelling workflow was first set up in Label Studio on 100
-images and was later expanded to 400 additional unique images @LabelStudio. Labeling images with this Web user interface was more efficient that expected hence more images can be labelled in a shorter time. Moreover having more data to train and evaluate a model against with brings better robustness and genaralisation, as more pattern gestalts and noise can be used.
+images and was later expanded to 400 additional unique images @LabelStudio. The
+web interface made the annotation workflow fast enough to enlarge the labelled
+set within the project scope. The larger set is useful because it exposes the
+classifier to more pattern variants and noise structures, but it does not remove
+the need for agreement checks.
 
 Figure @fig:pattern-decision-tree shows a first draft of the manual
 pattern-labelling tree. It first asks whether a visible pattern is present and
@@ -1029,29 +1066,43 @@ then separates local patterns from patterns that extend across time.
 This is a working aid for annotation and not yet a final rule set.
 
 == Data Simulation and Preprocessing
-Several preprocessing were explored, but these runs were not
-evaluated with the later reporting setup and are therefore not treated as
-model results. The exploratory comparisons include different scalin methods: nearest-neighbour,
-linear, quadratic, cubic, and Lanczos resizing, 
-
-pipelines with and without Gaussian smoothing filtering, z-scoring before versus after resizing, value
-binning in the ERP matrix, and input resolutions from `16x16` to `256x256`.
+Several preprocessing choices were explored, but these early runs were not
+evaluated with the later reporting setup and are therefore not treated as final
+model results. The exploratory comparisons include nearest-neighbour, linear,
+quadratic, cubic, and Lanczos resizing; pipelines with and without Gaussian
+smoothing; z-scoring before versus after resizing; value binning in the ERP
+matrix; and input resolutions from `16x16` to `256x256`.
 
 The real-data path currently sorts trials, applies per-timepoint z-scoring,
 performs Gaussian low-pass filtering, and resizes the image to the model input
-size. 
+size.
 
-Additional explored data augmentation,
-morphological operations, edge detectors, denoising, contrast
-normalisation, gradient-based channels, and anti-aliased resizing. These
-experiments were useful for narrowing the design space, but they did not
-produce a retained improvement in classification performance at that stage.
+The pipeline is therefore treated as a structured configuration problem, not as
+a fixed background step. This follows the general lesson from nnU-Net: some
+choices can be fixed for comparability, some can be derived from dataset
+properties, and others need empirical validation @Isensee2021nnUNet. In this
+thesis, resolution, smoothing, z-scoring order, channel construction, and class
+balancing belong to that empirical part of the design space.
+
+Additional explored variants include data augmentation, morphological
+operations, edge detectors, denoising, contrast normalisation, gradient-based
+channels, and anti-aliased resizing. These experiments were useful for
+narrowing the design space, but they did not produce a retained improvement in
+classification performance at that stage.
 RESULT TABEL
 
 == Calibration, Models, and Training
-Binary CNN baselines with
-one, three, and ten convolutional layers, together with a pre-trained
-`ResNet18`. 
+The classifier comparison uses binary CNN baselines with one, three, and ten
+convolutional layers, together with a pretrained `ResNet18`.
+
+Because labelled ERP images are scarce, augmentation is evaluated as part of the
+training design rather than as a secondary data-cleaning step. Brain-RetinaNet is
+a domain-distant but useful reference point: in a small labelled MRI detection
+dataset, Iqbal et al. use targeted augmentation to address limited sample
+availability and report improvements across several detector backbones
+@Iqbal2026BrainRetinaNet. The analogy is limited to the data regime, but it
+supports treating class-aware ERP-image augmentation and class balancing as
+central training decisions.
 
 Parameters to adjust: dependent component latencies, asymmetric window offsets, 38 in total. FOR NOW
 
@@ -1172,10 +1223,21 @@ The results are also conditional on the chosen preprocessing pipeline. Sorting,
 z-scoring, smoothing, resizing, cropping, and channel construction all change
 the image seen by the CNN. This is not a minor technical detail: ERP methods
 research shows that reasonable processing choices can lead to different
-measurements and conclusions @Clayson2021ERPMultiverse. In the experiments,
-resolution, filtering, and channel variants also changed performance. The
-reported metrics therefore describe one concrete representation pipeline, not
-an intrinsic property of ERP images in general.
+measurements and conclusions @Clayson2021ERPMultiverse. Biomedical image
+segmentation shows the same dependency from another angle: nnU-Net obtains
+strong results with U-Net-like templates by systematically configuring the
+whole preprocessing, training, and post-processing pipeline
+@Isensee2021nnUNet. In the experiments, resolution, filtering, and channel
+variants also changed performance. The reported metrics therefore describe one
+concrete representation pipeline, not an intrinsic property of ERP images in
+general.
+
+Visualisation conventions add another layer of conditionality. Mikheev et al.
+show that ERP researchers do not use fully consistent names for plot types and
+that practices around sorting, polarity, colour maps, and uncertainty displays
+vary across users and tools @Mikheev2024ArtOfBrainwaves. A classifier trained
+on rendered ERP images therefore inherits assumptions from the rendering
+toolchain as well as from the EEG preprocessing pipeline.
 
 Finally, the empirical scope is deliberately narrow. The main task is binary:
 `sigmoid` versus `no_class`. This makes the sim-to-real question easier to test,
@@ -1192,6 +1254,20 @@ general ERP-image pattern recognition across subjects, sessions, datasets, or
 all possible pattern families.
 
 == Future Work
+One useful next step is a non-CNN baseline for the same ordered-matrix task.
+Magnostics shows that hand-engineered image descriptors can rank matrix
+visualisations by visible motifs @Behrisch2017Magnostics. A small descriptor
+library for ERP images would test whether sigmoid detection really needs learned
+filters or whether fixed measures of curvature, continuity, gradient
+concentration, and row-order structure already capture much of the task.
+
+A second extension is localisation. The current classifier assigns one label to
+an entire ERP image, so it cannot mark where a pattern starts, ends, or overlaps
+with another structure. Detection-style biomedical imaging work such as
+Brain-RetinaNet shows how convolutional models can move from image-level
+classification toward localising relevant regions @Iqbal2026BrainRetinaNet. For
+ERP images, such a shift would require labels for pattern extents in trial-time
+space, not only image-level labels.
 
 // ----------------------------------------------------------------------------
 // Chapter 6 - End with direct answers, not a second discussion.
