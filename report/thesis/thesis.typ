@@ -588,67 +588,21 @@
 = Introduction <chp:introduction>
 
 == Motivation
-When a person sees a stimulus, reads a word, moves their eyes, or presses a
-button, the brain response changes within fractions of a second. To study such
-fast processes, we need a measurement that follows brain activity on the same
-time scale. Electroencephalography (EEG) does this by recording electrical
-activity from the scalp. For this introduction, this simple idea is enough;
-Chapter 2 defines the terms more carefully.
+When a person sees a bird, reads a word, moves their eyes, or presses a button, the brain response changes within fractions of a second. To study such fast processes, a measurement that follows brain activity on a comparable time scale is needed. Electroencephalography (EEG) provides this temporal view by recording electrical activity from the scalp. EEG can follow rapid event-related dynamics, but the relevant structure is embedded in a noisy trial-by-trial signal.The raw EEG signal is difficult to interpret because each single trial contains a large amount of unrelated electrical activity, and only may contain a response of interest. A common solution is to repeat the same type of event multiple times, align the EEG to that event on-set, and aggregate over trials, commonly averageing to improve the signal-to-noise ratio @Light2010, @Luck2014. The result is an event-related potential (ERP).This averaging approach is still common practice in human neuroscience and ERPresearch @Kappenman2021, @Donoghue2022.
 
-The raw EEG signal is difficult to interpret because each single trial contains
-both the response of interest and a large amount of unrelated activity. A common
-solution is to repeat the same type of event many times, align the EEG to that
-event, and average the trials. The result is an event-related potential (ERP).
-This averaging approach is still central in human neuroscience, and ERP
-research now spans many components, tasks, and application areas
-@Kappenman2021 @Donoghue2022.
+Averaging is useful, but it also hides information. Two datasets can have a similar average over trials even if the individual trials behave very differently. A component may be present on most input channels but appear blurred or absend in others. A response may be linked more closely to a later button press or the next fixation than to the event used for alignment. Different trial subtypes can also cancel each other when they are averaged @Jung2001, @Ouyang2017LatencyVariabilityReview.
 
-Averaging is useful, but it also hides information. Two datasets can have a
-similar average even if the individual trials behave very differently. A
-component may be present on most trials but appear blurred because its timing
-changes. A response may be linked more closely to a later button press or the
-next fixation than to the event used for alignment. Different trial subtypes
-can also cancel each other when they are averaged too early
-@Jung2001 @Ouyang2017LatencyVariabilityReview.
+ERP images keep the otherwise aggregateed structure visible. Instead of reducing all trials to one waveform, they show the data as an image. Rows are trials, columns are time points, and colour represents signal amplitude. If the rows are sorted by a meaningful experimental variable, such as reaction time or fixation duration a potential structure across trials can become visible. A curved band may indicate response-locked activity, a fan may indicate increasing timing variability, and a vertical split may indicate a condition difference.
 
-ERP images keep this missing structure visible. Instead of reducing all trials
-to one waveform, they show the data as an image: rows are trials, columns are
-time points, and colour represents signal amplitude. If the rows are sorted by
-a meaningful variable, such as reaction time, fixation duration, or trial
-order, structure across trials can become visible. A curved band may indicate
-response-locked activity, a fan may indicate increasing timing variability, and
-a vertical split may indicate a condition difference.
+This visualisation is useful to extract more information then over the common aggregating approaches. In eye-tracking EEG, for example, neighbouring fixations and saccades can overlap with the analysed response. A pattern in an ERP image can therefore be a clue to a cognitive effect, to event overlap, or to a preprocessing issue. This is why ERP images are useful  as a first diagnostic view, often followed by more explicit overlap modelling or regression-based analysis @Dimigen2011Coregistration, @Ehinger2019Unfold.
 
-This visual structure is useful, but it still needs care. In eye-tracking EEG,
-for example, neighbouring fixations and saccades can overlap with the analysed
-response. A pattern in an ERP image can therefore be a clue to a cognitive
-effect, to event overlap, or to a preprocessing issue. This is why ERP images
-are best treated as a first diagnostic view, often followed by more explicit
-overlap modelling or regression-based analysis @Dimigen2011Coregistration
-@Ehinger2019Unfold.
+A practical problem is scale. A single experiment can produce many ERP images resultig of different patients, channels, conditional variables, time windows, and processing choices like samplimg rate. A researcher can only inspect a limited amount of ERP images manually, which may be insufficient to cover all of the recorded data of an expriment. Manual judgement is also hard to reproduce unless the criteria are written down and applied consistently. Manualy labelling data may also contain the risk of false classification, which makes comapring results of multiple reseachers necessary. Automated pattern recognition is attractive because it can turn this slow visual screening step into a consistent first pass. It does not replace interpretation, but it aids for desicion making.
 
-The practical problem is scale. A researcher can inspect a few ERP images by
-hand, but the number grows quickly with subjects, channels, conditions, and
-sorting variables. Manual judgement is also hard to reproduce unless the
-criteria are written down and applied consistently. Automated pattern
-recognition is attractive because it can turn this slow visual screening step
-into a consistent first pass. It does not replace interpretation; it helps
-decide where interpretation should start.
+Once this screening step becomes a machine-learning problem, the bottleneck shifts. Real ERP images are heterogeneous due to different experimental set-ups, and are mostly not labelled for our interest of finding visual patterns. Manual annotation can provide a small evaluation set, but it is a weak foundation for training a deep image classifier from scratch to use in a productive medical workflow @Roy2019. Simulation offers a way to create many labelled examples under known assumptions, while real data remain necessary for testing whether the learned visual concept transfers across data sets.
 
-This thesis focuses on that first pass. The goal is to detect interpretable
-ERP-image morphology, not to explain the underlying brain process
-automatically. The main experiments narrow the task to `sigmoid` versus
-`no_class`, while the broader pattern vocabulary remains important for
-simulation and annotation. Deep learning is a plausible tool for this
-image-based task, but it needs labelled examples, and those labels are costly
-to create manually @Roy2019.
+This thesis focuses on the automated approach to find visual patterns in ERP images. The goal is to detect interpretable ERP-image morphology of intreset, not to explain the underlying brain process or origin. Deep learning is a plausible tool for this image-based task, but only if the label bottleneck and the gap between simulated and real ERP images are handled explicitly.
 
-The project therefore uses simulation to create labelled training data under
-controlled assumptions. UnfoldSim.jl provides a principled basis for simulating
-continuous event-based EEG-like time series, which can then be rendered as ERP
-images @Schepers2025. The central question follows directly from this setup:
-can a model trained on simulated ERP-image structure recognise the same kind of
-sigmoid pattern in manually labelled real data?
+The project therefore uses simulation to create labelled training data under controlled assumptions. UnfoldSim.jl is used for simulating continuous event-based EEG-like time series, which can then be rendered as ERP images @Schepers2025. One central question follows directly from this setup: can a model trained on simulated ERP-images recognise the same kind of pattern in manually labelled real data?
 
 == Research Questions and Contributions
 // State the main research question, sketch the sim-to-real idea at a high
@@ -667,97 +621,23 @@ sigmoid pattern in manually labelled real data?
 = Background and Related Work <chp:background>
 
 == EEG, ERPs, and ERP Images
-Electroencephalography (EEG) is a method for recording electrical brain
-activity from the scalp. In a typical human EEG experiment, an electrode cap is
-placed on the participant's head, the electrodes are connected to an amplifier,
-and each electrode records a voltage time series relative to a reference
-electrode @Light2010. These voltages are small, indirect measurements. The
-signal at one scalp electrode is not the activity of a single neuron, but a
-macroscopic field signal shaped by many synchronised postsynaptic currents,
-the geometry of the head, the chosen reference, and volume conduction through
-brain tissue, skull, and scalp @Nunez2006 @Cohen2014. The strength of EEG is
-therefore temporal rather than spatial: it can follow neural activity on the
-scale of milliseconds. Its weakness is that each single trial mixes the
-event-related response of interest with ongoing brain activity, eye movements,
-muscle artefacts, line noise, and other measurement noise @Luck2014.
+Electroencephalography (EEG) is a method for recording electrical brain activity from the scalp. In a typical human EEG experiment, an electrode cap is placed on the participant's head, the electrodes are connected to an amplifier, each electrode records a voltage over a time series @Light2010. The aplitudes of the recorded potentials are in the magnitude of microvolts. The signal at one scalp electrode is not the activity of a single neuron, but a macroscopic field signal shaped by many local brain currents. The geometry of the head, the chosen reference baseline, and volume conduction through brain tissue, skull, and scalp have an impact on the output signal @Nunez2006. The strength of EEG is therefore temporal rather than spatial, it can follow neural activity on the scale of milliseconds. Its weakness is that each single trial mixes the event-related response of interest with ongoing brain activity, eye movements, muscle artefacts, powerline noise, and other measurement noise @Luck2014.
 
-An event-related potential (ERP) is not recorded as a separate signal. It is
-estimated from the continuous EEG by using the event markers of an experiment.
-An event marker defines a meaningful time point, for example stimulus onset,
-the start of a fixation, or a participant's response. Around each event, the
-continuous EEG is cut into a short epoch, such as a pre-stimulus baseline
-period followed by several hundred milliseconds after the event. Each epoch is
-one trial. Standard ERP preprocessing then usually includes steps such as
-filtering, artefact handling, and baseline correction, where the mean voltage
-in the pre-event interval is subtracted from the epoch @Luck2014 @Light2010.
-Classical ERP analysis aligns all epochs at time zero and averages them. Signal
-components that occur consistently after the event remain visible in the
-average, whereas activity that is not consistently time-locked is reduced by
-averaging @Luck2014. ERP components such as P100, N170, and P300 are then
-described by their polarity, latency, amplitude, and scalp distribution
-@Luck2014 @Kappenman2021.
+An event-related potential (ERP) is not recorded as a separate signal. It is estimated from the continuous EEG by using the event markers of an experiment. An event marker defines a meaningful time point, for example stimulus onset, the start of a fixation, or a participant's response. Around each event, the continuous EEG is cut into a short epoch, usually as a pre-stimulus baseline period followed by several hundred milliseconds after the event, commonly up to one second. Each epoch is refered to as a trial. Standard ERP preprocessing then usually includes steps such as high- or low pass filtering, artefact handling, and baseline correction @Luck2014 @Light2010.
+Common ERP analysis aligns all epochs at time zero and average the trial aplitudes. Signal components that occur consistently after the event remain visible in the average, whereas activity that is not consistently time-locked, including noise is reduced by averaging @Luck2014. ERP components such as P100, N170, and P300 are then described by their polarity, latency, amplitude, and scalp distribution @Luck2014, @Kappenman2021.
 
-The average ERP is useful, but it deliberately removes single-trial variation.
-Two datasets can have almost the same average waveform even if one contains a
-systematic latency drift across trials and the other contains a stable response
-with only random noise. Jung et al. make this issue explicit in their work on
-single-trial ERP analysis: relevant event-related dynamics may be hidden by the
-average because individual trials differ in latency, amplitude, and artefact
-contamination @Jung2001. An ERP image keeps this single-trial information. It
-is not a photograph of the brain and not a scalp topography. It is a
-two-dimensional representation of one EEG channel or one extracted ERP signal:
-the horizontal axis is time, the vertical axis is trial number, and the colour
-at each cell encodes the voltage amplitude for one trial at one time point
-@Jung2001.
+The averageed ERP signal is useful, but it deliberately removes single-trial variation. Two datasets can have almost the same average waveform even if one contains a systematic latency drift across trials and the other contains a stable response with only random noise. Jung et al. make this issue explicit in their work on single-trial ERP analysis. Relevant event-related dynamics may be hidden by the average because individual trials differ in latency, amplitude, and artefact contamination @Jung2001. An ERP image keeps this single-trial information. It is a two-dimensional representation of one EEG channel. The horizontal axis is time, the vertical axis are trials stacked on top of each other, and the colour at each cell encodes the voltage amplitude for one trial at one time point @Jung2001.
 
-A recent survey of ERP visualisation practice anchors this terminology in the
-broader field. Mikheev et al. describe ERP data as a high-dimensional array over
-sensors, time, conditions, subjects, and trials, and treat the ERP image as one
-of eight common plot types for ERP and regression-based ERP results
-@Mikheev2024ArtOfBrainwaves. The same survey reports that naming is not fully
-consistent across ERP plot types, which is why this thesis uses the term *ERP
-image* explicitly and consistently @Mikheev2024ArtOfBrainwaves.
+A recent survey by Mikheev et al. about ERP visualisation practice supports the terminology for ERP images. The survey shows that ERP images are known in the community, but that researchers do not consistently use the same name for this plot type. Instead the literature and practitioners use several related terms, which can make comparisons between studies and tools harder, such as sorted ERP trials or just trials. We therefore use the term ERP image consistently throughout this thesis @Mikheev2024ArtOfBrainwaves.
 
-The construction of an ERP image in this thesis follows the same conceptual
-pipeline as the project proposal: EEG/ERP recording first, ERP images second,
-pattern detection third. Starting from continuous EEG, the pipeline selects a
-channel, extracts event-locked epochs, applies the same preprocessing choices
-to all images, keeps the analysis window, and arranges the resulting data as a
-trial-by-time matrix. The matrix can then be normalised, smoothed, cropped, or
-resized so that it matches the input format of the CNN. The crucial step is
-the ordering of the rows. If rows are left in recording order, the image mainly
-shows the chronological sequence of trials. If rows are sorted by an
-experimental variable, a behavioural variable such as reaction time, or a
-simulated event parameter, the same voltage matrix can reveal whether the
-response changes systematically with that variable. A latency shift can become
-a slanted or curved band; an amplitude change can become a gradual colour
-change; a categorical split can become two visually distinct blocks. ERP images
-therefore preserve more information than a single averaged ERP waveform while
-still giving a compact visual summary.
+The ERP images in this thesis are built from already recorded EEG/ERP data. The data are assumed not to be raw recordings. Before this pipeline starts, muscle artefacts, eye-related artefacts, line noise, and other unusable segments should already have been handled. Noise from brain activity cannot be removed and remains the biggest obstacle. The task is therefore to turn preprocessed ERP data into ERP images for pattern detection.
 
-The next section uses this idea to define the ERP image patterns that appear in
-the simulation and annotation workflow. The later experiments narrow the
-classification task to `sigmoid` versus `no_class`, but that narrower task is
-easier to understand after the broader pattern vocabulary is clear.
+To create an ERP image for the purpose of this thesis, the trials from a single channel are used. The data often is in form of a time series, is cut into event-locked trials. Everything before the event is discarded. Only the time window from event start to at most one second after is kept, because the target patterns are expected in this interval rather than in longer recordings. The trials are arranged as a trial-by-time matrix, where each row is one trial and each column is one time point. This matrix can then be fruther be processed.
 
 == ERP Image Patterns
-The six pattern names used in this thesis are a practical vocabulary for visible
-structure in ERP images. They are not six separate brain components. Sorting can
-make different mechanisms visible: a component may shift in time, spread out
-with variable duration, change polarity, or vary non-linearly across the trial
-stack @Jung2001 @Delorme2004EEGLAB @Delorme2015GrandERPImage. The six labels
-were chosen because they cover these main cases while staying distinct enough
-for manual annotation.
+The six pattern names used in this thesis are a practical vocabulary for visible structure in ERP images. They are not six separate brain components. Sorting trials in the ERP image matrix can make different mechanisms visible. A component may shift in time, spread out with variable duration, change polarity, or vary non-linearly @Jung2001 @Delorme2004EEGLAB @Delorme2015GrandERPImage. The six labels were chosen because they cover these main cases while staying distinct enough for manual annotation.
 
-In prose, the thesis uses readable names: sigmoid, diverging bar, one-sided
-fan, hourglass, two-sided fan, and tilted bar. In code and annotation files,
-the same labels are written as `sigmoid`, `diverging_bar`, `one_sided_fan`,
-`hourglass`, `two_sided_fan`, and `tilted_bar`. This keeps the simulator,
-manual labels, and classifier outputs consistent. It also makes `no_class`
-clearer: it means that no coherent target pattern is visible, not merely that
-the image is not sigmoid-like.
-
-A `sigmoid` is a smooth, curved diagonal band. It often appears when epochs are
+A sigmoid is a smooth, curved diagonal band. It often appears when epochs are
 aligned to one event, but the relevant activity follows a later event, such as
 a response, decision, or next fixation. In reaction-time-sorted ERP images,
 early sensory activity can stay vertical while later positive activity follows

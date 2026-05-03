@@ -54,3 +54,9 @@ docs/site/
 # Week 19 generated downloads and JSON metadata
 /notebooks/week_19/**/*.json
 /notebooks/week_19/downloads/
+
+# Week 21 generated exports and outputs
+/notebooks/week_21/labelstudio_export_model_prioritized_200/
+/notebooks/week_21/labelstudio_export_pattern_positive_followup_1000/
+/notebooks/week_21/labelstudio_export_test/
+/notebooks/week_21/outputs/
