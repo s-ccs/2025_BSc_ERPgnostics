@@ -417,17 +417,13 @@
     (
       title: "Examiner",
       name: "Benedikt Ehinger",
-      affiliation: [Computational Cognitive Science \
-        Faculty of Electrical Engineering and Computer Science, \
-        Department of Computer Science
+      affiliation: [Institute for Visualization and Interactive Systems, Stuttgart Center for Simulation Science, University of Stuttgart
       ],
     ),
     (
       title: "Supervisor",
       name: "Vladimir Mikheev",
-      affiliation: [Computational Cognitive Science \
-        Faculty of Electrical Engineering and Computer Science, \
-        Department of Computer Science
+      affiliation: [Institute for Visualization and Interactive Systems, University of Stuttgart
       ],
     ),
   ),
@@ -602,7 +598,7 @@ Once this screening step becomes a machine-learning problem, the bottleneck shif
 
 This thesis focuses on the automated approach to find visual patterns in ERP images. The goal is to detect interpretable ERP-image morphology of intreset, not to explain the underlying brain process or origin. Deep learning is a plausible tool for this image-based task, but only if the label bottleneck and the gap between simulated and real ERP images are handled explicitly.
 
-The project therefore uses simulation to create labelled training data under controlled assumptions. UnfoldSim.jl is used for simulating continuous event-based EEG-like time series, which can then be rendered as ERP images @Schepers2025. One central question follows directly from this setup: can a model trained on simulated ERP-images recognise the same kind of pattern in manually labelled real data?
+The project therefore also uses simulation to create labelled training data under controlled assumptions. UnfoldSim.jl is used for simulating continuous event-based EEG-like time series, which can then be rendered as ERP images @Schepers2025. One central question follows directly from this setup: can a model trained on simulated ERP-images recognise the same kind of pattern in manually labelled real data?
 
 == Research Questions and Contributions
 // State the main research question, sketch the sim-to-real idea at a high
@@ -635,7 +631,7 @@ The ERP images in this thesis are built from already recorded EEG/ERP data. The 
 To create an ERP image for the purpose of this thesis, the trials from a single channel are used. The data often is in form of a time series, is cut into event-locked trials. Everything before the event is discarded. Only the time window from event start to at most one second after is kept, because the target patterns are expected in this interval rather than in longer recordings. The trials are arranged as a trial-by-time matrix, where each row is one trial and each column is one time point. This matrix can then be fruther be processed.
 
 == ERP Image Patterns
-The six pattern names used in this thesis are a practical vocabulary for visible structure in ERP images. They are not six separate brain components. Sorting trials in the ERP image matrix can make different mechanisms visible. A component may shift in time, spread out with variable duration, change polarity, or vary non-linearly @Jung2001 @Delorme2004EEGLAB @Delorme2015GrandERPImage. The six labels were chosen because they cover these main cases while staying distinct enough for manual annotation.
+The six pattern names used in this thesis are a practical vocabulary for visible structure in ERP images. They are not six separate brain components. Sorting trials in the ERP image matrix can make different mechanisms visible. A component may shift in time, spread out with variable duration, change polarity, or vary non-linearly @Jung2001, @Delorme2004EEGLAB, @Delorme2015GrandERPImage. The six labels were chosen because they cover these main cases while staying distinct enough for manual annotation.
 
 A sigmoid is a smooth, curved diagonal band. It often appears when epochs are
 aligned to one event, but the relevant activity follows a later event, such as
