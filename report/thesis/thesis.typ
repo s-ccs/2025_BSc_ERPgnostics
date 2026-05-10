@@ -63,7 +63,8 @@
     ],
     [Self-supervised learning (SSL)], [
       Pretrain the encoder without class labels. In this project that stage is
-      SimCLR-style contrastive learning on ERP images.
+      contrastive learning following the Simple Framework for Contrastive
+      Learning of Visual Representations (SimCLR) on ERP images.
     ],
     [Linear probe], [
       Freeze the SSL encoder and train only a new classifier head on labelled
@@ -285,7 +286,8 @@
     [Semi-SSL], [
       ResNet18, SSL fine-tune
     ], [
-      SSL pool: same-dataset mod-4 pool. SimCLR-style pretraining on the
+      SSL pool: same-dataset mod-4 pool. Simple Framework for Contrastive
+      Learning of Visual Representations (SimCLR) pretraining on the
       larger same-dataset mod-4 pool, then
       full fine-tuning on true labels.
     ], [
@@ -295,7 +297,8 @@
     [Self-supervised], [
       ResNet18, SSL fine-tune
     ], [
-      SSL pool: trainfold images. SimCLR-style pretraining on the current
+      SSL pool: trainfold images. Simple Framework for Contrastive Learning of
+      Visual Representations (SimCLR) pretraining on the current
       fold's training images, then
       full fine-tuning on true labels.
     ], [
@@ -464,15 +467,15 @@
 #let pattern-decision-tree = figure(
   align(center)[
     #block(width: 124mm, height: 118mm)[
-      #place(top + center, dx: -35mm, dy: 49mm)[
-        #block(width: 66mm, height: 62mm, fill: rgb("#f5efe5"), radius: 2.5pt)[]
+      #place(top + center, dx: -35.5mm, dy: 48mm)[
+        #block(width: 69mm, height: 69mm, fill: rgb("#f5efe5"), radius: 2.5pt)[]
       ]
-      #place(top + center, dx: 35mm, dy: 49mm)[
-        #block(width: 66mm, height: 62mm, fill: rgb("#eaf1f8"), radius: 2.5pt)[]
+      #place(top + center, dx: 35.5mm, dy: 48mm)[
+        #block(width: 69mm, height: 69mm, fill: rgb("#eaf1f8"), radius: 2.5pt)[]
       ]
-      #place(top + center, dx: 2.5mm, dy: 1mm)[
+      #place(top + center, dx: 0mm, dy: 1mm)[
         #set text(size: 6.8pt)
-        #scale(72%, reflow: true)[
+        #scale(67%, reflow: true)[
           #diagram(
             cell-size: 3.6mm,
             node-stroke: .6pt,
@@ -488,83 +491,102 @@
               width: 20mm,
             ),
 
-            edge((0, 1.8), (-2.8, 3.8), "-|>", [No], label-pos: 0.48),
-            node((-2.8, 3.8), align(center)[No class], width: 18mm, corner-radius: 1.5pt),
+            edge((0, 1.8), (-2.8, 3.6), "-|>", [No], label-pos: 0.48),
+            node((-2.8, 3.6), align(center)[No class], width: 18mm, corner-radius: 1.5pt),
 
-            edge((0, 1.8), (0, 4.1), "-|>", [Yes], label-pos: 0.6),
+            edge((0, 1.8), (0, 3.6), "-|>", [Yes], label-pos: 0.6),
             node(
-              (0, 4.1),
-              align(center)[Narrow\ in time?],
-              shape: shapes.diamond,
-              width: 18mm,
-            ),
-
-            edge((0, 4.1), (-2.3, 6.5), "-|>", [Yes], label-pos: 0.55),
-            node(
-              (-2.3, 6.5),
-              align(center)[Opposed V\ shapes?],
-              shape: shapes.diamond,
-              width: 19mm,
-            ),
-            edge((-2.3, 6.5), (-3.1, 8.8), "-|>", [Yes], label-pos: 0.55),
-            node((-3.1, 8.8), align(center)[Two-sided fan], width: 22mm, corner-radius: 1.5pt),
-            edge((-2.3, 6.5), (-1.3, 8.8), "-|>", [No], label-pos: 0.55),
-            node(
-              (-1.3, 8.8),
-              align(center)[Pinched at\ centre?],
-              shape: shapes.diamond,
-              width: 18mm,
-            ),
-            edge((-1.3, 8.8), (-2.1, 11.1), "-|>", [Yes], label-pos: 0.55),
-            node((-2.1, 11.1), align(center)[Hourglass bar], width: 21mm, corner-radius: 1.5pt),
-            edge((-1.3, 8.8), (-0.5, 11.1), "-|>", [No], label-pos: 0.55),
-            node((-0.5, 11.1), align(center)[Diverging bar], width: 21mm, corner-radius: 1.5pt),
-
-            edge((0, 4.1), (2.3, 6.5), "-|>", [No], label-pos: 0.45),
-            node(
-              (2.3, 6.5),
-              align(center)[Single S-shaped\ band?],
+              (0, 3.6),
+              align(center)[Drifts across\ time?],
               shape: shapes.diamond,
               width: 20mm,
             ),
-            edge((2.3, 6.5), (1.3, 8.8), "-|>", [Yes], label-pos: 0.55),
-            node((1.3, 8.8), align(center)[Sigmoid], width: 14mm, corner-radius: 1.5pt),
-            edge((2.3, 6.5), (3.3, 8.8), "-|>", [No], label-pos: 0.55),
+
+            edge((0, 3.6), (1.85, 5.8), "-|>", [Yes], label-pos: 0.55),
             node(
-              (3.3, 8.8),
-              align(center)[Opens to\ one side?],
+              (1.85, 5.8),
+              align(center)[Straight\ diagonal band?],
+              shape: shapes.diamond,
+              width: 22mm,
+            ),
+            edge((1.85, 5.8), (1.1, 8.0), "-|>", [Yes], label-pos: 0.55),
+            node((1.1, 8.0), align(center)[Tilted bar], width: 18mm, corner-radius: 1.5pt),
+            edge((1.85, 5.8), (2.6, 8.0), "-|>", [No], label-pos: 0.55),
+            node(
+              (2.6, 8.0),
+              align(center)[S-shaped\ curved band?],
+              shape: shapes.diamond,
+              width: 22mm,
+            ),
+            edge((2.6, 8.0), (1.95, 10.35), "-|>", [Yes], label-pos: 0.55),
+            node((1.95, 10.35), align(center)[Sigmoid], width: 14mm, corner-radius: 1.5pt),
+            edge((2.6, 8.0), (3.35, 10.35), "-|>", [No], label-pos: 0.55),
+            node((3.35, 10.35), align(center)[No class], width: 18mm, corner-radius: 1.5pt),
+
+            edge((0, 3.6), (-2.2, 5.8), "-|>", [No], label-pos: 0.45),
+            node(
+              (-2.2, 5.8),
+              align(center)[Opens or\ widens?],
+              shape: shapes.diamond,
+              width: 20mm,
+            ),
+            edge((-2.2, 5.8), (-3.05, 8.0), "-|>", [Yes], label-pos: 0.55),
+            node(
+              (-3.05, 8.0),
+              align(center)[One-sided\ opening?],
+              shape: shapes.diamond,
+              width: 20mm,
+            ),
+            edge((-3.05, 8.0), (-3.9, 10.55), "-|>", [Yes], label-pos: 0.55),
+            node((-3.9, 10.55), align(center)[One-sided fan], width: 20mm, corner-radius: 1.5pt),
+            edge((-3.05, 8.0), (-2.35, 10.7), "-|>", [No], label-pos: 0.55),
+            node((-2.35, 10.7), align(center)[Two-sided fan], width: 21mm, corner-radius: 1.5pt),
+
+            edge((-2.2, 5.8), (-1.35, 8.0), "-|>", [No], label-pos: 0.55),
+            node(
+              (-1.35, 8.0),
+              align(center)[Polarity changes\ across trials?],
+              shape: shapes.diamond,
+              width: 23mm,
+            ),
+            edge((-1.35, 8.0), (-1.45, 9.6), "-|>", [Yes], label-pos: 0.55),
+            node(
+              (-1.45, 9.6),
+              align(center)[Pinched\ middle?],
               shape: shapes.diamond,
               width: 18mm,
             ),
-            edge((3.3, 8.8), (2.8, 11.1), "-|>", [Yes], label-pos: 0.55),
-            node((2.8, 11.1), align(center)[One-sided fan], width: 21mm, corner-radius: 1.5pt),
-            edge((3.3, 8.8), (3.9, 11.1), "-|>", [No], label-pos: 0.55),
-            node((3.9, 11.1), align(center)[No class], width: 18mm, corner-radius: 1.5pt),
+            edge((-1.45, 9.6), (-2.05, 12.0), "-|>", [Yes], label-pos: 0.55),
+            node((-2.05, 12.0), align(center)[Hourglass bar], width: 20mm, corner-radius: 1.5pt),
+            edge((-1.45, 9.6), (-0.65, 12.0), "-|>", [No], label-pos: 0.55),
+            node((-0.65, 12.0), align(center)[Diverging bar], width: 20mm, corner-radius: 1.5pt),
+            edge((-1.35, 8.0), (-0.75, 10.05), "-|>", [No], label-pos: 0.55),
+            node((-0.75, 10.05), align(center)[No class], width: 18mm, corner-radius: 1.5pt),
           )
         ]
       ]
-      #place(top + left, dx: 3mm, dy: 53mm)[
+      #place(top + center, dx: -51mm, dy: 50.5mm)[
         #box(
           inset: (x: 1.6mm, y: 0.8mm),
           fill: rgb("#f5efe5"),
           radius: 1.5pt,
         )[
-          #text(size: 7pt, weight: "semibold", fill: rgb("#6f5f43"))[Mostly vertical]
+          #text(size: 6.6pt, weight: "semibold", fill: rgb("#6f5f43"))[Vertical or widening]
         ]
       ]
-      #place(top + right, dx: -3mm, dy: 53mm)[
+      #place(top + center, dx: 51mm, dy: 50.5mm)[
         #box(
           inset: (x: 1.6mm, y: 0.8mm),
           fill: rgb("#eaf1f8"),
           radius: 1.5pt,
         )[
-          #text(size: 7pt, weight: "semibold", fill: rgb("#46627a"))[Extends across time]
+          #text(size: 6.6pt, weight: "semibold", fill: rgb("#46627a"))[Time-drifting]
         ]
       ]
     ]
   ],
   caption: [
-    First draft of a manual decision tree for ERP image patterns. .
+    First draft of a manual decision tree for ERP image patterns. TODO aligne, more explain
   ],
 )
 
@@ -660,7 +682,7 @@ ERP images are not natural photographs, they are more of a heatmap of a matrix. 
 
 Biomedical imaging makes the same point from a different direction. nnU-Net uses U-Net-like templates but auto configures preprocessing, network structure, training, and post-processing based dataset properties and validation results @Isensee2021nnUNet. Brain-RetinaNet, in a small MRI tumour-detection setting, that also uses augmentation as a central response to limited labelled data @Iqbal2026BrainRetinaNet. For this thesis, the transferable point is not the medical task itself, but the priority given to data representation, augmentation, and pipeline configuration.
 
-== Data Simulation, Sim-to-Real Transfer, and Semi-Supervised Learning
+== Data Simulation and Sim-to-Real Transfer
 The starting point for the simulation work is the label bottleneck. Simulation provides a controlled way to generate labelled ERP data. The goal is not to reproduce full physiological EEG recording, but to generate time-by-trial matrices in which known event timing, component timing, covariates, and noise create interpretable ERP-image patterns @Schepers2025. This enabels a method to deal with scarce real data samples.
 
 Each simulation repetition samples a set of global and component-level parameters. The global parameters define the lognormal event-onset process, the number of trials, the sampling rate, and the epoch duration. The component parameters define P100, N170, and P300 basis functions through their widths, hanning window centres, relative gaps, peak offsets, and amplitudes. The component timing is partly dependent by construction. The N170 window follows the P100 window by a sampled gap, analog the P300 window follows the N170 window by another sampled gap. In order to create no class images, the simulated trials are assigned a random trial order.
@@ -681,114 +703,30 @@ UnfoldSim is well suited to this role because it simulates continuous event-base
 
 The central challenge is the sim-to-real gap. A strong synthetic performance does not guarantee real-data performance, because the model may learn properties that are specific to the simulator. Domain randomisation addresses this risk by varying simulator parameters so that the real world appears as one possible variant within the window of synthetic distribution @Tobin2017. In this thesis, the same principle applies. If parameters of component widths, latency gaps, amplitudes, basis shapes, or noise levels are varied too aggressively, the target pattern itself becomes implausible or disappears.
 
-Increase variation and remain close enough to the real sigmoid morphology is the goal. The exposed search space contains 24 parameter specifications. Because each specification has a mean and a standard deviation, the calibration problem becomes 48-dimensional. Three sampling strategies were explored. 
+Increase variation and remain close enough to the real sigmoid morphology is the goal. The exposed search space contains 24 parameter specifications. Because each specification has a mean and a standard deviation, the calibration problem becomes 48-dimensional. Five search strategies and one simulator-first scoring proxy were explored.
 
 Broad random search, or domain randomisation, samples the parameter space as a random exploration baseline, with each parameter given the same weight. 
 
 Latin hypercube sampling divides continuous parameter ranges into discrete intervals and combines them through permutations, spreading candidates more evenly across dimensions than ordinary random sampling @McKay1979. 
 
+As a naive parameter-search attempt, a heterogeneity experiment scaled the standard deviations of normally distributed parameters to 50%, 100%, and 1000% of the corresponding mean magnitudes.
+
 Monte Carlo random search provides a simple comparison by uniformly sampling one parameter at a time, and remains defensible because random search is a strong baseline for high-dimensional hyperparameter spaces @Bergstra2012. 
 
 The two-zone mixture uses 70% of the best parameters from the LHS baseline and 30% edge-case configurations.
 
-Two scoring ideas were then tested. The simulator-first workflow scores
-candidates before full model training by comparing real and simulated sigmoid
-images in a hand-designed feature space. The feature vector includes global
-image standard deviation, mean absolute gradients along time and trial axes,
-local patch-variance statistics, row autocorrelation, gradient concentration,
-interquartile-range trends, and row/column energy variation. The distance score
-combines z-normalised feature differences with a radial-basis-function maximum
-mean discrepancy term, which is a kernel-based way to compare two sample
-distributions @Gretton2012. The model-first workflow skips this proxy and
-scores candidate simulator settings directly by real-data balanced accuracy.
-
-Additional attempts were included because the first simulator settings did not
-close the gap. A heterogeneity experiment increased parameter standard
-deviations to 50%, 100%, and 1000% of the corresponding means to see whether
-broader variation would produce more realistic image diversity. A dense neural
-network with low-pass preprocessing was used as a model-first direct-search
-alternative. These runs are important for the thesis even when they do not
-produce the final model, because they show that the problem is not merely a
-matter of sampling more synthetic examples. The shape and variability of the
-simulated distribution matter.
-
-Self-supervised and semi-supervised learning enter the project as a response to
-this limitation. SimCLR-style contrastive learning trains an encoder by making
-two augmented views of the same image agree while separating representations of
-different images @Chen2020. Confidence-based pseudo-labelling then adds
-unlabelled examples only when the current model predicts a label with high
-confidence, a principle also used in later semi-supervised image methods such
-as FixMatch @Sohn2020. In this thesis, these methods do not replace the
-simulation question. They provide a second way to reduce dependence on
-synthetic labels by learning from unlabelled real ERP images.
+Feature-distance scoring is a simulator-first proxy for judging simulator settings before full model training. It compares real and simulated sigmoid images with hand-designed image features and combines feature differences with an RBF-MMD distribution distance @Gretton2012. The resulting candidates are then compared through model-first ranking by real-data balanced accuracy.
 
 == Related Work and Positioning
-The closest related work starts with single-trial ERP analysis. Grand averages
-remain useful summaries, but they can hide latency jitter, response subtypes,
-and systematic links between EEG and behaviour. ERP images and related
-single-trial methods address this by keeping trial-wise structure visible
-instead of reducing it to one waveform @Jung2001
-@Pernet2011SingleTrialWhyBother @Ouyang2017LatencyVariabilityReview. This
-thesis uses the same idea, but turns the visual inspection step into a
-classification problem.
+The closest related work starts with single-trial ERP analysis. Grand averages remain useful summaries, but they can hide latency jitter, response subtypes, and systematic links between EEG and behaviour. ERP images and related single-trial methods address this by keeping trial-wise structure visible instead of reducing it to one waveform @Jung2001, @Pernet2011SingleTrialWhyBother, @Ouyang2017LatencyVariabilityReview. This thesis uses the same idea, but turns the visual inspection step into a classification problem.
 
-Recent ERP visualisation survey work confirms that this inspection step is still
-mainly treated as a plotting and software-practice problem. Mikheev et al. study
-plot types, tools, naming, sorting, colour maps, and uncertainty displays, rather
-than automated screening algorithms @Mikheev2024ArtOfBrainwaves. The present
-thesis therefore sits between ERP visualisation practice and machine-learning
-screening: it does not propose another ERP plot type, but asks whether an
-existing plot type can become a reproducible classification input.
+A second line of related work studies how overlapping events should be handled in naturalistic EEG. In reading and free viewing, fixations and saccades occur close together, so the response to one event can overlap with the response to the next. Regression-based tools such as Unfold model this problem explicitly @Dimigen2011Coregistration, @Ehinger2019Unfold, @Dimigen2021RegressionEyeTrackingEEG. This matters here because a visible ERP image pattern can reflect cognitive timing, event overlap, or both.
 
-A second line of related work studies how overlapping events should be handled
-in naturalistic EEG. In reading and free viewing, fixations and saccades occur
-close together, so the response to one event can overlap with the response to
-the next. Regression-based tools such as Unfold model this problem explicitly
-@Dimigen2011Coregistration @Ehinger2019Unfold
-@Dimigen2021RegressionEyeTrackingEEG. This matters here because a visible ERP
-image pattern can reflect cognitive timing, event overlap, or both.
+Deep learning provides the classification background. CNNs have already been used successfully for EEG decoding and for P300 detection. EEG-specific models such as DeepConvNet and EEGNet show that convolutional architectures can learn useful temporal and spatial filters from EEG data @Cecotti2011P300CNN, @Schirrmeister2017DeepConvNet, @Lawhern2018EEGNet. The present task is different. The model does not predict a stimulus class or a brain-computer interface (BCI) command, but whether an ERP image contains a named visual morphology.
 
-Deep learning provides the modelling background. CNNs have already been used
-successfully for EEG decoding and for P300 detection, and EEG-specific models
-such as DeepConvNet and EEGNet show that convolutional architectures can learn
-useful temporal and spatial filters from electrophysiological data
-@Cecotti2011P300CNN @Schirrmeister2017DeepConvNet @Lawhern2018EEGNet. The
-present task is different. The model does not predict a stimulus class or a BCI
-command, but whether an ERP image contains a named visual morphology.
+Label Studio provides a practical environment for that workflow of manual labelling, but the labels still depend on human judgement @LabelStudio. This makes annotation quality important, agreement statistics are beneficial to deal with that @Artstein2008InterCoderAgreement, @Hallgren2012InterRaterKappa.
 
-The data regime is also different from most supervised EEG classification.
-Manual labels for ERP image morphology are expensive because a person must
-inspect an image and decide whether a pattern is present. Label Studio provides
-a practical environment for that workflow, but the labels still depend on human
-judgement @LabelStudio. This makes annotation quality important: agreement
-statistics are needed when several raters label ambiguous visual categories
-@Artstein2008InterCoderAgreement @Hallgren2012InterRaterKappa.
-
-Simulation is one way to reduce this label bottleneck. EEG simulation tools
-such as SEREEGA and UnfoldSim show that event-related EEG-like data can be
-generated under controlled assumptions @Krol2018SEREEGA @Schepers2025. The
-central risk is that a model trained on synthetic images may learn simulator
-shortcuts instead of a pattern that also exists in real recordings. This is the
-same broad problem addressed by sim-to-real transfer and domain adaptation:
-the source and target distributions must be close enough for the learned
-representation to transfer @Tobin2017 @Ganin2016DANN.
-
-Self-supervised and semi-supervised learning offer a complementary path. Instead
-of relying only on labelled synthetic images, an encoder can learn from
-unlabelled ERP images and then use the smaller labelled set more efficiently.
-This idea is well established in computer vision through contrastive learning
-and pseudo-labelling, and it has also been explored directly for EEG
-representations @Chen2020 @Sohn2020 @Banville2021SelfSupervisedEEG.
-
-Taken together, the literature provides the pieces needed for this thesis:
-ERP images make trial-wise structure visible, CNNs can learn from
-electrophysiological inputs, simulation can provide labelled examples, and
-semi-supervised methods can exploit unlabelled data. What is still missing is a
-validated path that combines these pieces for ERP-image morphology itself. The
-contribution of this thesis is therefore a focused simulation-to-real case
-study: train on simulated `sigmoid` and `no_class` ERP images, then test whether
-the learned visual concept survives in manually labelled real ERP images.
-
+Self-supervised and semi-supervised learning offer a complementary path. Instead of relying only on labelled images, an image encoder can learn from unlabelled ERP images and then use the smaller labelled set more efficiently. Pretraining based on the Simple Framework for Contrastive Learning of Visual Representations (SimCLR) learns an image encoder from augmented views @Chen2020, and confidence-based pseudo-labelling adds unlabelled examples only when the model predicts them with high confidence @Sohn2020. This idea has also been explored directly for EEG representations @Banville2021SelfSupervisedEEG.
 
 // ----------------------------------------------------------------------------
 // Chapter 3 - Describe the empirical pipeline in one place.
@@ -797,90 +735,56 @@ the learned visual concept survives in manually labelled real ERP images.
 // ----------------------------------------------------------------------------
 #pagebreak()
 = Data and Methods <chp:data-methods>
+This chapter describes the real and simulated data sources, the annotation workflow, the ERP-image preprocessing pipeline, the model-training setup, and the evaluation protocol.
 
 == Datasets, Annotation, and Task Definition
-At the time of writing, the project uses two real-data sources. The fixation TODO NEEDS SOURCE
-dataset remains the main source for manual annotation and direct validation,
-while an ERP CORE P3 derivative has been prepared as an unseen cross-domain
-dataset with per-subject epochs and reaction times @Kappenman2021. MORE TO COME
+The labelled real-data pool used for this thesis consists of the following datasets that were already available in processed or documented analysis-ready form. When processed derivatives were provided, these were used directly. When a source was available only as raw material, it was prepared according to the authors' provided code or processing recommendations before being converted into the common ERP-image format used in this thesis. All of the data sources have gone throw manual inspection an review. Goal is that the cnn model therefore trains on derived ERP-image inputs rather than raw or otherwise unprocessed recordings.
 
-The manual labelling workflow was first set up in Label Studio on 100
-images and was later expanded to 400 additional unique images @LabelStudio. The
-web interface made the annotation workflow fast enough to enlarge the labelled
-set within the project scope. The larger set is useful because it exposes the
-classifier to more pattern variants and noise structures, but it does not remove
-the need for agreement checks.
+The Reference Fixation Dataset provides the main fixation-locked ERP-image source (TODO citation).
 
-Figure @fig:pattern-decision-tree shows a first draft of the manual
-pattern-labelling tree. It first asks whether a visible pattern is present and
-then separates local patterns from patterns that extend across time.
+The Event-Related Potential CORE N170 source contributes face-processing epochs with reaction-time condition, and stimulus metadata @Kappenman2021, @ERPCOREN170OSF.
+
+The Event-Related Potential CORE N2pc source contributes visual-attention epochs with reaction-time, condition, stimulus, and bin metadata @Kappenman2021, @ERPCOREN2pcOSF.
+
+The Kilo-Word Event-Related Potential Database contributes word-level event-related potential averages from a lexical-decision study together with word-property variables @Dufau2015KiloWordERP, @KiloWordERPOSF.
+
+The EYE-EEG Reading source contributes fixation-locked natural-reading examples from the EYE-EEG test-data collection with EyeLink-to-electroencephalography synchronization metadata @Dimigen2011Coregistration, @Dimigen2021EyeEEGTestData.
+
+The EYE-EEG Freeviewing source contributes fixation-locked visual-search examples with synchronized eye-tracking and EEG recordings @Dimigen2021EyeEEGTestData.
+
+The EYE-EEG Sceneviewing Tobii source contributes fixation-locked scene-viewing examples recorded with Tobii eye tracking and EEG @Dimigen2021EyeEEGTestData.
+
+The EEGEyeNet saccade source contributes a saccade-locked representation from OpenNeuro and the Open Science Framework with a longer post-onset window for ERP-image inspection @Kastrati2021EEGEyeNet, @EEGEyeNetOSF, @EEGEyeNetOpenNeuro.
+
+The Reading Observed At Mindless Moments source contributes fixation-locked natural-reading epochs with EEG, eye-tracking, and attention-state annotations @ROAMM2025, @ROAMMOSF.
+
+The Unfold face free-viewing source contributes saccade-locked free-viewing data from the Open Science Framework example material for overlap-modelling examples @Ehinger2019Unfold, @UnfoldFaceFreeViewingOSF.
+
+The Natural Object Dataset EEG source contributes visual-object-recognition epochs @Zhang2025NODEEG, @NODEEGOpenNeuro.
+
+TODO add annotation process, first overview, then sort by model confidence, select few samples to test if suiatable for thesis, select 200 more and test what sorting variables can potentialy create patterns. Keep sorting variabels that contained at least one pattern and label all available channels from each of them.
 
 #pattern-decision-tree <fig:pattern-decision-tree>
 
-This is a working aid for annotation and not yet a final rule set.
-
 == Data Simulation and Preprocessing
-Several preprocessing choices were explored, but these early runs were not
-evaluated with the later reporting setup and are therefore not treated as final
-model results. The exploratory comparisons include nearest-neighbour, linear,
-quadratic, cubic, and Lanczos resizing; pipelines with and without Gaussian
-smoothing; z-scoring before versus after resizing; value binning in the ERP
-matrix; and input resolutions from `16x16` to `256x256`.
+Several preprocessing choices were explored. The exploratory comparisons for the re-size function include nearest-neighbour, linear, quadratic, cubic, and Lanczos resizing. For the image pipeline, it was tested with and without Gaussian smoothing. For the performance aspect tested z-scoring before versus after resizing. For encoding value binning in the ERP matrix and input resolutions from 16x16 to 256x256. In addition multiple visual noise reduction filters where tested. TODO create research questions from that with motivation for each.
 
-The real-data path currently sorts trials, applies per-timepoint z-scoring,
-performs Gaussian low-pass filtering, and resizes the image to the model input
-size.
+The best performing pipeline sorts trials, applies per-timepoint z-scoring, applies Gaussian smoothing filtering, and resizes the image matrix.
 
-The pipeline is therefore treated as a structured configuration problem, not as
-a fixed background step. This follows the general lesson from nnU-Net: some
-choices can be fixed for comparability, some can be derived from dataset
-properties, and others need empirical validation @Isensee2021nnUNet. In this
-thesis, resolution, smoothing, z-scoring order, channel construction, and class
-balancing belong to that empirical part of the design space.
+Therefore the preprocessing and training pipeline is treated as a structured configuration problem rather than a fixed background step. This follows the general lesson from nnU-Net: some choices should stay fixed for comparability, some can follow dataset properties, and others require empirical validation @Isensee2021nnUNet. In this thesis, the image pipeline, class balancing, augmentation, and model training form that empirical design space. Additional variants combine augmentation with different filtering, denoising, contrast, and resizing choices. They help narrow the design space.
 
-Additional explored variants include data augmentation, morphological
-operations, edge detectors, denoising, contrast normalisation, gradient-based
-channels, and anti-aliased resizing. These experiments were useful for
-narrowing the design space, but they did not produce a retained improvement in
-classification performance at that stage.
-RESULT TABEL
+todo RESULT TABEL overview
 
 == Calibration, Models, and Training
-The classifier comparison uses binary CNN baselines with one, three, and ten
-convolutional layers, together with a pretrained `ResNet18`.
+The classifier comparison uses binary CNN baselines with one, three, and ten convolutional layers, together with a pretrained ResNet18 model @He2016ResNet. ResNet is useful here because residual connections make a deeper image classifier easier to optimise while still providing a standard computer vision baseline for comparison. Having the best practices already implemented and not figuring them out, makes it easier to focus on the classification and preprocessing of the ERP images.
 
-Because labelled ERP images are scarce, augmentation is evaluated as part of the
-training design rather than as a secondary data-cleaning step. Brain-RetinaNet is
-a domain-distant but useful reference point: in a small labelled MRI detection
-dataset, Iqbal et al. use targeted augmentation to address limited sample
-availability and report improvements across several detector backbones
-@Iqbal2026BrainRetinaNet. The analogy is limited to the data regime, but it
-supports treating class-aware ERP-image augmentation and class balancing as
-central training decisions.
+Because labelled ERP images are scarce, augmentation is evaluated as part of the training design.Brain-RetinaNet is a domain-distant but useful reference point. In a small labelled MRI detection dataset, Iqbal et al. use targeted augmentation to address limited sample availability and report improvements across several detector backbones @Iqbal2026BrainRetinaNet. The analogy is limited to the data regime, but it supports treating class-aware ERP-image augmentation and class balancing as central training decisions.
 
-Parameters to adjust: dependent component latencies, asymmetric window offsets, 38 in total. FOR NOW
-
-broader parameter randomisation in the data simulation setup, together with
-broad random search, Latin hypercube sampling, Monte Carlo single-parameter
-search, and a two-zone mixture strategy, no gain. TABEL
-
+== Evaluation Protocol
 Performance metrics: accuracy, balanced
 accuracy, macro F1, precision, recall, and timing summaries under five-fold
 cross-validation. This gives us a consistent framework for comparing model
 families, preprocessing variants, and class-balancing strategies, as well as augmenting.
-
-== Evaluation Protocol
-Describe how models are evalueted, simulation -> real data path.
-
- binary labels and
-`64x64` single-channel inputs for 500 manually labelled images FOR NOW. Its timing
-
-Runntimes resulst
-TABEL  extraction and initial preparation dominate the runtime at
-41.87%, followed by low-pass filtering at 25.01% and z-scoring at 17.33%,
-while resizing contributes only 2.28%.
-
-Potential Bottelnecks
 
 
 // ----------------------------------------------------------------------------
@@ -891,36 +795,17 @@ Potential Bottelnecks
 = Results <chp:results>
 
 == Data Simulation and Calibration Results
-TABEL
-
-For now no result, model labels randomly
+TABEL to do
+per model, per explored adjustment
+classification on simulated data is perfect, on real data lacks behind the real approach.
 
 == Classification Performance Real Data
 TABEL
-This part already produced the clearest quantitative results. A first direct
-validation of the current `64x64` binary CNN against the 500 manual labels
-reached an accuracy of 0.284 and an F1 score of 0.175 for the pattern class,
-which shows that the initial sim-to-real transfer is still weak.
-
-Later five-fold experiments on the manually labelled data gave balanced
-accuracy values of 0.500 for both `cnn_1conv` and `cnn_3conv`, 0.600445 for
-`cnn_10conv`, and 0.849564 with `macro_f1 = 0.857006` for
-`resnet18_pretrained` at `64x64`. A resolution sweep then showed that
-`128x128` improved the same model to `balanced_accuracy = 0.905729` and
-`macro_f1 = 0.896564`, whereas `256x256` was slower and less stable at
-`balanced_accuracy = 0.868976`.
-
-The real-data processing comparison also produced a first ranking of practical
-changes. Per-image clipping to q01/q99 and scaling to `[-1, 1]` gave only
-small gains over the `64x64` baseline, while balancing the classes improved the
-current `resnet18_pretrained` setup to `balanced_accuracy = 0.897182` and
-`macro_f1 = 0.895754`. By contrast, the best current two-channel filter
-variant, based on a Laplacian second channel, remained slightly below the
-simpler one-channel baseline with `balanced_accuracy = 0.841661` and
-`macro_f1 = 0.85117`.
+for each model and the tested settings
 
 == Cross-Dataset Generalization
 TODO MORE DATA
+work in progress
 
 
 // ----------------------------------------------------------------------------
@@ -934,94 +819,22 @@ TODO MORE DATA
 
 
 == Limitations
-The main limitation of this thesis is the sim-to-real gap. The simulator can
-generate labelled ERP images in large numbers, but it can only generate the
-kind of variability that was built into it. Real EEG also contains
-subject-specific responses, non-stationary noise, artefacts, imperfect event
-timing, and preprocessing effects. This means that strong performance on
-synthetic images is not enough to show that the model has learned a real
-ERP-image pattern @Krol2018SEREEGA @Schepers2025. The weak first direct
-transfer result should therefore be read as a genuine limitation of the setup,
-not just as a tuning problem.
+The main limitation of this thesis is the sim-to-real gap. The simulator can generate labelled ERP images in large numbers, but it can only generate the kind of variability that was built into it. Real EEG also contains subject-specific responses, non-stationary noise, artefacts, imperfect event timing, and preprocessing effects. This means that strong performance on synthetic images is not enough to show that the model has learned a real ERP-image pattern @Krol2018SEREEGA @Schepers2025. The weak transfer result should therefore be read as a genuine limitation of the setup, not just as a tuning problem.
 
-A related risk is shortcut learning. CNNs often use whichever visual regularity
-is easiest for the training objective, even if that regularity is not the
-intended concept @Geirhos2020ShortcutLearning. In this project, such shortcuts
-could come from simulator-specific smoothness, noise texture, colour scaling,
-or unusually clean pattern boundaries. Domain randomisation is meant to reduce
-that risk by varying the synthetic world, but it cannot remove it completely
-@Tobin2017. If randomisation is too narrow, the model overfits to the
-simulator. If it is too broad, the target pattern itself becomes unrealistic.
+A related risk is shortcut learning. CNNs often use whichever visual regularity is easiest for the training objective, even if that regularity is not the intended concept @Geirhos2020ShortcutLearning. In this project, such shortcuts could come from simulator-specific smoothness, noise texture, colour scaling, or unusually clean pattern boundaries. Domain randomisation is meant to reduce that risk by varying the synthetic world, but it cannot remove it completely @Tobin2017. Same applies for the chosen augmentation steps, all of the tesed cnn models can detect and perfectly decide if a high or low resolution matrix was sclaed down to the same target size.
 
-The manual labels are another limitation. The real-data evaluation uses only a
-limited number of manually labelled ERP images, and visual pattern labels are
-not as objective as event markers or stimulus classes. Borderline cases can
-reasonably be judged differently, especially when a weak sigmoid, a tilted bar,
-or noisy overlap structure appear in the same image. Reliability measures are
-normally used to quantify such disagreement when several raters label the same
-material @Artstein2008InterCoderAgreement @Hallgren2012InterRaterKappa. Without
-that type of agreement analysis, disagreement between the classifier and the
-labels cannot always be interpreted as model error alone.
+The manual labels are another limitation. The real-data evaluation uses only a limited number of manually labelled ERP images, and visual pattern labels are not as objective as event markers or stimulus classes. Borderline cases can reasonably be judged differently, for instance when a weak and noisy sigmoid appears. Reliability measures are normally used to quantify such disagreement when several raters label the same material @Artstein2008InterCoderAgreement @Hallgren2012InterRaterKappa. Without that type of agreement analysis, disagreement between the classifier and the labels cannot always be interpreted as model error alone.
 
-The interpretation of a detected pattern is also limited. An ERP image can show
-a clear visual structure without revealing its cause. A sigmoid-like band may
-reflect a response-locked component, overlap from a neighbouring fixation, a
-sorting artefact, or a preprocessing choice. Work on fixation-related potentials
-and regression-based overlap correction shows that event overlap can change ERP
-morphology substantially @Dimigen2011Coregistration @Ehinger2019Unfold
-@Dimigen2021RegressionEyeTrackingEEG. The classifier in this thesis sees only
-the final image. It can detect morphology, but it cannot explain the underlying
-neurocognitive mechanism.
+The results are also conditional on the chosen preprocessing pipeline. Sorting, z-scoring, smoothing, and resizing all change the image seen by the CNN. This is not a minor technical detail. ERP methods research shows that reasonable processing choices can lead to different measurements and conclusions @Clayson2021ERPMultiverse.
 
-The results are also conditional on the chosen preprocessing pipeline. Sorting,
-z-scoring, smoothing, resizing, cropping, and channel construction all change
-the image seen by the CNN. This is not a minor technical detail: ERP methods
-research shows that reasonable processing choices can lead to different
-measurements and conclusions @Clayson2021ERPMultiverse. Biomedical image
-segmentation shows the same dependency from another angle: nnU-Net obtains
-strong results with U-Net-like templates by systematically configuring the
-whole preprocessing, training, and post-processing pipeline
-@Isensee2021nnUNet. In the experiments, resolution, filtering, and channel
-variants also changed performance. The reported metrics therefore describe one
-concrete representation pipeline, not an intrinsic property of ERP images in
-general.
-
-Visualisation conventions add another layer of conditionality. Mikheev et al.
-show that ERP researchers do not use fully consistent names for plot types and
-that practices around sorting, polarity, colour maps, and uncertainty displays
-vary across users and tools @Mikheev2024ArtOfBrainwaves. A classifier trained
-on rendered ERP images therefore inherits assumptions from the rendering
-toolchain as well as from the EEG preprocessing pipeline.
-
-Finally, the empirical scope is deliberately narrow. The main task is binary:
-`sigmoid` versus `no_class`. This makes the sim-to-real question easier to test,
-but it does not establish performance for the full six-pattern vocabulary. The
-negative class also mixes many different cases: random trial order, weak
-patterns, noisy images, and possible non-sigmoid structures. As a result, the
-current results cannot tell us whether the model would separate sigmoid from
-hourglass, fan, or tilted-bar patterns in a multiclass setting.
-
-These limitations do not make the study uninformative. They define what its
-results can support. The thesis evaluates whether a simulated visual concept
-can survive a first transfer to real labelled ERP images. It does not yet prove
-general ERP-image pattern recognition across subjects, sessions, datasets, or
-all possible pattern families.
+TODO add more, Computational power is fine. Maybe the ones form midterm and proposal. 
 
 == Future Work
-One useful next step is a non-CNN baseline for the same ordered-matrix task.
-Magnostics shows that hand-engineered image descriptors can rank matrix
-visualisations by visible motifs @Behrisch2017Magnostics. A small descriptor
-library for ERP images would test whether sigmoid detection really needs learned
-filters or whether fixed measures of curvature, continuity, gradient
-concentration, and row-order structure already capture much of the task.
+One useful next step is a non-CNN baseline for the same ordered-matrix task. TODO transfromer modell
 
-A second extension is localisation. The current classifier assigns one label to
-an entire ERP image, so it cannot mark where a pattern starts, ends, or overlaps
-with another structure. Detection-style biomedical imaging work such as
-Brain-RetinaNet shows how convolutional models can move from image-level
-classification toward localising relevant regions @Iqbal2026BrainRetinaNet. For
-ERP images, such a shift would require labels for pattern extents in trial-time
-space, not only image-level labels.
+A second extension is localisation. The current classifier assigns one label to an entire ERP image, so it cannot mark where a pattern starts, ends, or overlaps with another structure. Detection-style biomedical imaging work such as Brain-RetinaNet shows how convolutional models can move from image-level classification toward localising relevant regions @Iqbal2026BrainRetinaNet. For ERP images, such a shift would require labels for pattern extents in trial-time space, not only image-level labels.
+
+To do augmentation is very important. Maybe simulate data for specific real data set.
 
 // ----------------------------------------------------------------------------
 // Chapter 6 - End with direct answers, not a second discussion.
