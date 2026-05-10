@@ -46,10 +46,6 @@
 
   #set par(justify: false)
 
-  This appendix collects short definitions for the main experimental terms and
-  compact comparison tables for the model results discussed in the thesis.
-  The goal is to document which model, which data split, which preprocessing
-  pipeline, and which measured outcome correspond to each result claim.
 
   == Short Definitions of the Main Experimental Terms
 
@@ -76,10 +72,10 @@
     ],
     [Semi-self-supervised learning], [
       Use SSL first, then extend later training with pseudo-labelled examples
-      from an unlabeled pool.
+      from an unlabelled pool.
     ],
-    [Pseudo-labeling], [
-      Predict labels for unlabeled ERP images and keep only the high-confidence
+    [Pseudo-labelling], [
+      Predict labels for unlabelled ERP images and keep only the high-confidence
       predictions as temporary training labels.
     ],
     [Trainfold images], [
@@ -87,7 +83,7 @@
       validation fold stays unseen.
     ],
     [Same-dataset mod-4 pool], [
-      A larger unlabeled ERP-image pool from the same fixation dataset,
+      A larger unlabelled ERP-image pool from the same fixation dataset,
       generated with the same mod-4 policy.
     ],
     [Mod-4 split], [
@@ -112,13 +108,6 @@
   #pagebreak()
 
   == Real-Data Supervised Baseline Candidates
-
-  The table below focuses on experiments that use only the real fixation ERP
-  data for the actual classification objective. This is the most relevant
-  reference set when later methods are compared against a real-data baseline.
-  All rows use the project default: mod-4 split and grouped 5-fold
-  cross-validation. The numbers come from the saved preprocessing notebook
-  output and the exported augmentation summaries.
 
   #set text(size: 8.2pt)
   #appendix-result-table(
@@ -171,21 +160,9 @@
   )
   #set text(size: 11pt)
 
-  The strongest supervised-only result in the current code base came from the
-  preprocessing challenge with the pretrained ResNet18. The Gaussian-only
-  reference was already very strong, and the best filter-augmented pipeline
-  improved it only slightly. The best random-initialised baseline was weaker
-  than the pretrained baseline but still clearly above the raw supervised
-  baseline from the SSL notebook.
-
   #pagebreak()
 
   == Supervised Augmentation and Imbalance Handling
-
-  This table isolates the supervised-only comparison from the dedicated
-  augmentation notebook. All runs use only labelled fixation ERP images with
-  the shared mod-4 split and grouped 5-fold CV.
-  The numbers come from data_augmentation_tests_ranked_summary.csv.
 
   #set text(size: 8.2pt)
   #appendix-result-table(
@@ -253,21 +230,9 @@
   )
   #set text(size: 11pt)
 
-  These results should be read carefully. In the augmentation study the gain is
-  not a pure augmentation effect, because the training set was also rebalanced
-  by generating four augmented views for each labelled pattern example and one
-  augmented view for each labelled no-pattern example.
-
   #pagebreak()
 
   == SSL and Semi-SSL Comparison
-
-  The SSL notebook compares representation learning, transfer mode, and
-  pseudo-labeling. Unlike the supervised baselines above, these rows use either
-  an unlabeled pretraining pool, pseudo-labels, or both.
-  All rows are still evaluated with the project default: mod-4 split and
-  grouped 5-fold CV.
-  The numbers come from semi_supervised_learing2_summary.csv.
 
   #set text(size: 8.2pt)
   #appendix-result-table(
@@ -277,7 +242,7 @@
       ResNet18, SSL fine-tune + student stage
     ], [
       SSL pool: same-dataset mod-4 pool. Same SSL stage as above, then
-      confidence-based pseudo-labeling with
+      confidence-based pseudo-labelling with
       threshold 0.9; about 823 pseudo-labels kept per fold.
     ], [
       BAcc 0.837.\ Macro-F1 0.849.
@@ -334,20 +299,7 @@
   )
   #set text(size: 11pt)
 
-  The difference between fine-tuning and semi-SSL is important. Fine-tuning
-  still learns only from true labels after the SSL stage. Semi-SSL adds a
-  second student-training stage in which high-confidence predictions from an
-  unlabeled pool are reused as pseudo-labels. In the current experiments that
-  extra stage improved balanced accuracy from 0.776 to 0.837.
-
-  == Behaviour on New Unlabeled ERP Candidates
-
-  These rows are not performance metrics in the strict sense, because the
-  candidate ERP images have no ground-truth labels. They are included here only
-  as evidence for how the trained models behave when screening new data.
-  The trained models come from the same mod-4 grouped 5-fold evaluation
-  protocol as above.
-  The numbers come from semi_supervised_learing2_unlabeled_summary.csv.
+  == Behaviour on New Unlabelled ERP Candidates
 
   #set text(size: 8.2pt)
   #appendix-result-table(
@@ -364,7 +316,7 @@
     [Screening], [
       ResNet18, SSL fine-tune
     ], [
-      SSL source: trainfold images. No pseudo-labeling in the final stage.
+      SSL source: trainfold images. No pseudo-labelling in the final stage.
     ], [
       Pattern rate 0.065.\ Mean confidence 0.934.
     ],
@@ -372,14 +324,14 @@
     [Screening], [
       ResNet18, SSL fine-tune
     ], [
-      SSL source: same-dataset mod-4 pool. No pseudo-labeling in the final
+      SSL source: same-dataset mod-4 pool. No pseudo-labelling in the final
       stage.
     ], [
       Pattern rate 0.043.\ Mean confidence 0.964.
     ],
 
     [Screening], [
-      ResNet18, SSL fine-tune + pseudo-labeling
+      ResNet18, SSL fine-tune + pseudo-labelling
     ], [
       Semi-SSL with the same-dataset mod-4 pool and a pseudo-label student
       stage.
@@ -586,7 +538,7 @@
     ]
   ],
   caption: [
-    First draft of a manual decision tree for ERP image patterns. TODO aligne, more explain
+    First draft of a manual decision tree for ERP image patterns. TODO align, more explanation
   ],
 )
 
@@ -606,25 +558,25 @@
 = Introduction <chp:introduction>
 
 == Motivation
-When a person sees a bird, reads a word, moves their eyes, or presses a button, the brain response changes within fractions of a second. To study such fast processes, a measurement that follows brain activity on a comparable time scale is needed. Electroencephalography (EEG) provides this temporal view by recording electrical activity from the scalp. EEG can follow rapid event-related dynamics, but the relevant structure is embedded in a noisy trial-by-trial signal.The raw EEG signal is difficult to interpret because each single trial contains a large amount of unrelated electrical activity, and only may contain a response of interest. A common solution is to repeat the same type of event multiple times, align the EEG to that event on-set, and aggregate over trials, commonly averageing to improve the signal-to-noise ratio @Light2010, @Luck2014. The result is an event-related potential (ERP).This averaging approach is still common practice in human neuroscience and ERPresearch @Kappenman2021, @Donoghue2022.
+When a person sees a bird, reads a word, moves their eyes, or presses a button, the brain response changes within fractions of a second. To study such fast processes, a measurement that follows brain activity on a comparable time scale is needed. Electroencephalography (EEG) provides this temporal view by recording electrical activity from the scalp. EEG can follow rapid event-related dynamics, but the relevant structure is embedded in a noisy trial-by-trial signal. The raw EEG signal is difficult to interpret because each single trial contains a large amount of unrelated electrical activity, and may only contain a response of interest. A common solution is to repeat the same type of event multiple times, align the EEG to that event onset, and aggregate over trials, commonly by averaging to improve the signal-to-noise ratio @Light2010, @Luck2014. The result is an event-related potential (ERP). This averaging approach is still common practice in human neuroscience and ERP research @Kappenman2021, @Donoghue2022.
 
-Averaging is useful, but it also hides information. Two datasets can have a similar average over trials even if the individual trials behave very differently. A component may be present on most input channels but appear blurred or absend in others. A response may be linked more closely to a later button press or the next fixation than to the event used for alignment. Different trial subtypes can also cancel each other when they are averaged @Jung2001, @Ouyang2017LatencyVariabilityReview.
+Averaging is useful, but it also hides information. Two datasets can have a similar average over trials even if the individual trials behave very differently. A component may be present on most input channels but appear blurred or absent in others. A response may be linked more closely to a later button press or the next fixation than to the event used for alignment. Different trial subtypes can also cancel each other out when they are averaged @Jung2001, @Ouyang2017LatencyVariabilityReview.
 
-ERP images keep the otherwise aggregateed structure visible. Instead of reducing all trials to one waveform, they show the data as an image. Rows are trials, columns are time points, and colour represents signal amplitude. If the rows are sorted by a meaningful experimental variable, such as reaction time or fixation duration a potential structure across trials can become visible. A curved band may indicate response-locked activity, a fan may indicate increasing timing variability, and a vertical split may indicate a condition difference.
+ERP images keep the otherwise aggregated structure visible. Instead of reducing all trials to one waveform, they show the data as an image. Rows are trials, columns are time points, and colour represents signal amplitude. If the rows are sorted by a meaningful experimental variable, such as reaction time or fixation duration, a potential structure across trials can become visible. A curved band may indicate response-locked activity, a fan may indicate increasing timing variability, and a vertical split may indicate a condition difference.
 
-This visualisation is useful to extract more information then over the common aggregating approaches. In eye-tracking EEG, for example, neighbouring fixations and saccades can overlap with the analysed response. A pattern in an ERP image can therefore be a clue to a cognitive effect, to event overlap, or to a preprocessing issue. This is why ERP images are useful  as a first diagnostic view, often followed by more explicit overlap modelling or regression-based analysis @Dimigen2011Coregistration, @Ehinger2019Unfold.
+This visualisation is useful to extract more information than the common aggregating approaches. In eye-tracking EEG, for example, neighbouring fixations and saccades can overlap with the analysed response. A pattern in an ERP image can therefore be a clue to a cognitive effect, to event overlap, or to a preprocessing issue. This is why ERP images are useful as a first diagnostic view, often followed by more explicit overlap modelling or regression-based analysis @Dimigen2011Coregistration, @Ehinger2019Unfold.
 
-A practical problem is scale. A single experiment can produce many ERP images resultig of different patients, channels, conditional variables, time windows, and processing choices like samplimg rate. A researcher can only inspect a limited amount of ERP images manually, which may be insufficient to cover all of the recorded data of an expriment. Manual judgement is also hard to reproduce unless the criteria are written down and applied consistently. Manualy labelling data may also contain the risk of false classification, which makes comapring results of multiple reseachers necessary. Automated pattern recognition is attractive because it can turn this slow visual screening step into a consistent first pass. It does not replace interpretation, but it aids for desicion making.
+A practical problem is scale. A single experiment can produce many ERP images, resulting from different patients, channels, conditional variables, time windows, and processing choices such as sampling rate. A researcher can only inspect a limited number of ERP images manually, which may be insufficient to cover all of the recorded data of an experiment. Manual judgement is also hard to reproduce unless the criteria are written down and applied consistently. Manually labelling data also carries the risk of false classification, which makes it necessary to compare results across multiple researchers. Automated pattern recognition is attractive because it can turn this slow visual screening step into a consistent first pass. It does not replace interpretation, but it aids decision making.
 
-Automated recognition enabels new broad scale applications of what researchers can do with the patterns after they are found. This makes ERP images available as a quantitative variable such as: analysing existing erp data for a retrospective study, biomarker exploration for patients to aid in diagnostic, and comparison across datasets and experiments where manual inspection would otherwise cover only a small subset of images @Pernet2011SingleTrialWhyBother, @Kappenman2021.
+Automated recognition enables new broad-scale applications of what researchers can do with the patterns after they are found. It makes ERP images available as a quantitative variable for tasks such as analysing existing ERP data for retrospective studies, biomarker exploration to aid patient diagnostics, and comparison across datasets and experiments where manual inspection would otherwise cover only a small subset of images @Pernet2011SingleTrialWhyBother, @Kappenman2021.
 
-Automation is also useful as a quality-control signal. An ERP recording and its data analysis include many heterogeneous processing steps and experimental setups such as applied filters, aplitude references, artefact handling, experimental vraiables, and time windows. These choices can preserve a visible pattern, weaken it, or create a misleading one @Clayson2021ERPMultiverse. A detector can therefore flag ERP images form a faulty processing pieline @Cecotti2011P300CNN.
+Automation is also useful as a quality-control signal. An ERP recording and its data analysis include many heterogeneous processing steps and experimental setups, such as applied filters, amplitude references, artefact handling, experimental variables, and time windows. These choices can preserve a visible pattern, weaken it, or create a misleading one @Clayson2021ERPMultiverse. A detector can therefore flag ERP images from a faulty processing pipeline @Cecotti2011P300CNN.
 
-Once this screening step becomes a machine-learning problem, the bottleneck shifts. Real ERP images are heterogeneous due to different experimental set-ups, and are mostly not labelled for our interest of finding visual patterns. Manual annotation can provide a small evaluation set, but it is a weak foundation for training a deep image classifier from scratch to use in a productive medical workflow @Roy2019. Simulation offers a way to create many labelled examples under known assumptions, while real data remain necessary for testing whether the learned visual concept transfers across data sets.
+Once this screening step becomes a machine-learning problem, the bottleneck shifts. Real ERP images are heterogeneous due to different experimental set-ups, and are mostly not labelled with regard to our interest in finding visual patterns. Manual annotation can provide a small evaluation set, but it is a weak foundation for training a deep image classifier from scratch for use in a productive medical workflow @Roy2019. Simulation offers a way to create many labelled examples under known assumptions, while real data remain necessary for testing whether the learned visual concept transfers across datasets.
 
-This thesis focuses on the automated approach to find visual patterns in ERP images. The goal is to detect interpretable ERP-image morphology of intreset, not to explain the underlying brain process or origin. Deep learning is a plausible tool for this image-based task, but only if the label bottleneck and the gap between simulated and real ERP images are handled explicitly.
+This thesis focuses on the automated approach to finding visual patterns in ERP images. The goal is to detect interpretable ERP-image morphologies of interest, not to explain the underlying brain process or origin. Deep learning is a plausible tool for this image-based task, but only if the label bottleneck and the gap between simulated and real ERP images are handled explicitly.
 
-The project therefore also uses simulation to create labelled training data under controlled assumptions. UnfoldSim.jl is used for simulating continuous event-based EEG-like time series, which can then be rendered as ERP images @Schepers2025. One central question follows directly from this setup: can a model trained on simulated ERP-images recognise the same kind of pattern in manually labelled real data?
+The project therefore also uses simulation to create labelled training data under controlled assumptions. UnfoldSim.jl is used to simulate continuous event-based EEG-like time series, which can then be rendered as ERP images @Schepers2025. One central question follows directly from this setup: can a model trained on simulated ERP images recognise the same kind of pattern in manually labelled real data?
 
 == Research Questions and Contributions
 // State the main research question, sketch the sim-to-real idea at a high
@@ -643,75 +595,75 @@ The project therefore also uses simulation to create labelled training data unde
 = Background and Related Work <chp:background>
 
 == EEG, ERPs, and ERP Images
-Electroencephalography (EEG) is a method for recording electrical brain activity from the scalp. In a typical human EEG experiment, an electrode cap is placed on the participant's head, the electrodes are connected to an amplifier, each electrode records a voltage over a time series @Light2010. The aplitudes of the recorded potentials are in the magnitude of microvolts. The signal at one scalp electrode is not the activity of a single neuron, but a macroscopic field signal shaped by many local brain currents. The geometry of the head, the chosen reference baseline, and volume conduction through brain tissue, skull, and scalp have an impact on the output signal @Nunez2006. The strength of EEG is therefore temporal rather than spatial, it can follow neural activity on the scale of milliseconds. Its weakness is that each single trial mixes the event-related response of interest with ongoing brain activity, eye movements, muscle artefacts, powerline noise, and other measurement noise @Luck2014.
+Electroencephalography (EEG) is a method for recording electrical brain activity from the scalp. In a typical human EEG experiment, an electrode cap is placed on the participant's head, the electrodes are connected to an amplifier, and each electrode records a voltage over a time series @Light2010. The amplitudes of the recorded potentials are on the order of microvolts. The signal at one scalp electrode is not the activity of a single neuron, but a macroscopic field signal shaped by many local brain currents. The geometry of the head, the chosen reference baseline, and volume conduction through brain tissue, skull, and scalp all have an impact on the output signal @Nunez2006. The strength of EEG is therefore temporal rather than spatial: it can follow neural activity on the scale of milliseconds. Its weakness is that each single trial mixes the event-related response of interest with ongoing brain activity, eye movements, muscle artefacts, powerline noise, and other measurement noise @Luck2014.
 
-An event-related potential (ERP) is not recorded as a separate signal. It is estimated from the continuous EEG by using the event markers of an experiment. An event marker defines a meaningful time point, for example stimulus onset, the start of a fixation, or a participant's response. Around each event, the continuous EEG is cut into a short epoch, usually as a pre-stimulus baseline period followed by several hundred milliseconds after the event, commonly up to one second. Each epoch is refered to as a trial. Standard ERP preprocessing then usually includes steps such as high- or low pass filtering, artefact handling, and baseline correction @Luck2014 @Light2010.
-Common ERP analysis aligns all epochs at time zero and average the trial aplitudes. Signal components that occur consistently after the event remain visible in the average, whereas activity that is not consistently time-locked, including noise is reduced by averaging @Luck2014. ERP components such as P100, N170, and P300 are then described by their polarity, latency, amplitude, and scalp distribution @Luck2014, @Kappenman2021.
+An event-related potential (ERP) is not recorded as a separate signal. It is estimated from the continuous EEG by using the event markers of an experiment. An event marker defines a meaningful time point, for example stimulus onset, the start of a fixation, or a participant's response. Around each event, the continuous EEG is cut into a short epoch, usually a pre-stimulus baseline period followed by several hundred milliseconds after the event, commonly up to one second. Each epoch is referred to as a trial. Standard ERP preprocessing then usually includes steps such as high- or low-pass filtering, artefact handling, and baseline correction @Luck2014, @Light2010.
+Common ERP analysis aligns all epochs at time zero and averages the trial amplitudes. Signal components that occur consistently after the event remain visible in the average, whereas activity that is not consistently time-locked, including noise, is reduced by averaging @Luck2014. ERP components such as P100, N170, and P300 are then described by their polarity, latency, amplitude, and scalp distribution @Luck2014, @Kappenman2021.
 
-The averageed ERP signal is useful, but it deliberately removes single-trial variation. Two datasets can have almost the same average waveform even if one contains a systematic latency drift across trials and the other contains a stable response with only random noise. Jung et al. make this issue explicit in their work on single-trial ERP analysis. Relevant event-related dynamics may be hidden by the average because individual trials differ in latency, amplitude, and artefact contamination @Jung2001. An ERP image keeps this single-trial information. It is a two-dimensional representation of one EEG channel. The horizontal axis is time, the vertical axis are trials stacked on top of each other, and the colour at each cell encodes the voltage amplitude for one trial at one time point @Jung2001.
+The averaged ERP signal is useful, but it deliberately removes single-trial variation. Two datasets can have almost the same average waveform even if one contains a systematic latency drift across trials and the other contains a stable response with only random noise. Jung et al. make this issue explicit in their work on single-trial ERP analysis. Relevant event-related dynamics may be hidden by the average because individual trials differ in latency, amplitude, and artefact contamination @Jung2001. An ERP image keeps this single-trial information. It is a two-dimensional representation of one EEG channel. The horizontal axis is time, the vertical axis lists trials stacked on top of each other, and the colour at each cell encodes the voltage amplitude for one trial at one time point @Jung2001.
 
-A recent survey by Mikheev et al. about ERP visualisation practice supports the terminology for ERP images. The survey shows that ERP images are known in the community, but that researchers do not consistently use the same name for this plot type. Instead the literature and practitioners use several related terms, which can make comparisons between studies and tools harder, such as sorted ERP trials or just trials. We therefore use the term ERP image consistently throughout this thesis @Mikheev2024ArtOfBrainwaves.
+A recent survey by Mikheev et al. about ERP visualisation practice supports the terminology for ERP images. The survey shows that ERP images are known in the community, but that researchers do not consistently use the same name for this plot type. Instead, the literature and practitioners use several related terms, such as sorted ERP trials or just trials, which can make comparisons between studies and tools harder. We therefore use the term ERP image consistently throughout this thesis @Mikheev2024ArtOfBrainwaves.
 
 The ERP images in this thesis are built from already recorded EEG/ERP data. The data are assumed not to be raw recordings. Before this pipeline starts, muscle artefacts, eye-related artefacts, line noise, and other unusable segments should already have been handled. Noise from brain activity cannot be removed and remains the biggest obstacle. The task is therefore to turn preprocessed ERP data into ERP images for pattern detection.
 
-To create an ERP image for the purpose of this thesis, the trials from a single channel are used. The data often is in form of a time series, is cut into event-locked trials. Everything before the event is discarded. Only the time window from event start to at most one second after is kept, because the target patterns are expected in this interval rather than in longer recordings. The trials are arranged as a trial-by-time matrix, where each row is one trial and each column is one time point. This matrix can then be fruther be processed.
+To create an ERP image for the purpose of this thesis, the trials from a single channel are used. The data, often in the form of a time series, is cut into event-locked trials. Everything before the event is discarded. Only the time window from event start to at most one second after is kept, because the target patterns are expected in this interval rather than in longer recordings. The trials are arranged as a trial-by-time matrix, where each row is one trial and each column is one time point. This matrix can then be further processed.
 
 == ERP Image Patterns
-The six pattern names used in this thesis are a practical vocabulary for visible structure in ERP images. They are not six separate brain components. Sorting trials in the ERP image matrix can make different mechanisms visible. A component may shift in time, spread out with variable duration, change polarity, or vary non-linearly @Jung2001, @Delorme2004EEGLAB, @Delorme2015GrandERPImage. The six labels were chosen because they cover these main cases while staying distinct enough for manual annotation.
+The six pattern names used in this thesis form a practical vocabulary for visible structure in ERP images. They are not six separate brain components. Sorting trials in the ERP-image matrix can make different mechanisms visible. A component may shift in time, spread out with variable duration, change polarity, or vary non-linearly @Jung2001, @Delorme2004EEGLAB, @Delorme2015GrandERPImage. The six labels were chosen because they cover these main cases while staying distinct enough for manual annotation.
 
 A sigmoid is a smooth, curved or S-shaped diagonal band. It can appear when epochs are aligned to one event, but the relevant activity is time-locked to another event whose latency varies across trials, such as a response or a subsequent fixation @Jung2001. In fixation-related data, a sigmoid-like curve may also result from overlap with neighbouring fixations @Dimigen2021RegressionEyeTrackingEEG.
 
-A tilted bar is a straight diagonal band in an ERP image. A component shifts monotonically in time across the sorted trial axis at an approximately constant rate. When trials are sorted by reaction time, this morphology can reflect response-locked like P100 or N100, or latency-graded activity whose timing follows the response like P300. Single-trial ERP studies show that late P300-family latencies covary with reaction time @Jung2001, @Ouyang2017LatencyVariabilityReview, @Walsh2017P3bLatencyRT.
+A tilted bar is a straight diagonal band in an ERP image. A component shifts monotonically in time across the sorted trial axis at an approximately constant rate. When trials are sorted by reaction time, this morphology can reflect response-locked components such as P100 or N100, or latency-graded activity whose timing follows the response such as P300. Single-trial ERP studies show that late P300-family latencies covary with reaction time @Jung2001, @Ouyang2017LatencyVariabilityReview, @Walsh2017P3bLatencyRT.
 
-A one-sided fan looks like a band that opens to only one side. The earlier border of the visible activity stays close to the time-locking event. The later border moves farther out for rows with longer fixation durations in the sorted trial stack. In fixation-related data, such pattern may reflect duration-dependent overlap. The response evoked by the next fixation appears later in rows with longer fixation durations @Dimigen2011Coregistration, @Dimigen2021RegressionEyeTrackingEEG.
+A one-sided fan looks like a band that opens to only one side. The earlier border of the visible activity stays close to the time-locking event. The later border moves farther out for rows with longer fixation durations in the sorted trial stack. In fixation-related data, such a pattern may reflect duration-dependent overlap. The response evoked by the next fixation appears later in rows with longer fixation durations @Dimigen2011Coregistration, @Dimigen2021RegressionEyeTrackingEEG.
 
-A two-sided fan is a pattern that narrows near the middle of the sorted trial stack and opens toward both ends. It consists of early vertical bands whose amplitude and polarity vary across the sorted trials. Such patterns can arise from latency variability, mixtures of trial types or components, or temporal overlap from neighbouring events @Jung2001, @Ouyang2017LatencyVariabilityReview, @Ehinger2019Unfold.
+A two-sided fan is a pattern that narrows near the middle of the sorted trial stack and opens towards both ends. It consists of early vertical bands whose amplitude and polarity vary across the sorted trials. Such patterns can arise from latency variability, mixtures of trial types or components, or temporal overlap from neighbouring events @Jung2001, @Ouyang2017LatencyVariabilityReview, @Ehinger2019Unfold.
 
 
-A diverging bar is a vertical band whose polarity reverses across the sorted trial stack. Its timing stays fairly stable, so the visible cue is a polarity flip rather than the latency drift. It originates from a true polarity change across different categorical experimental variabels @Wang2020PhotosensitivePhantom,@CecottiRies2017SingleTrialDetection, @Teixeira2018EvokedPatterns,
+A diverging bar is a vertical band whose polarity reverses across the sorted trial stack. Its timing stays fairly stable, so the visible cue is a polarity flip rather than a latency drift. It originates from a true polarity change across different categorical experimental variables @Wang2020PhotosensitivePhantom, @CecottiRies2017SingleTrialDetection, @Teixeira2018EvokedPatterns,
 @KovalenkoBusch2016PerisaccadicVision, @Kohl2019InterleavedDeconvolution.
 
 An hourglass is a pinched ERP-image pattern. The activity is strong at the lower and upper ends of the sorted trial stack but weak or almost absent in the middle. The two ends usually have opposite polarity, which separates it from a continuous diverging bar. Such a pattern can arise from non-linear covariate effects, cancelling response subtypes or subject groups, or changing overlap between stimulus-, fixation-, and response-locked activity @Jung2001, @Ouyang2017LatencyVariabilityReview, @Woldorff1993ERPOverlap, @Ehinger2019Unfold, @Dimigen2021RegressionEyeTrackingEEG, @Mikheev2024ArtOfBrainwaves.
 
 == CNN-Based Pattern Detection in ERP Data
-Convolutional neural networks (CNN) are designed to learn local filters and combine them across multiple layers into increasingly abstract image features @LeCun2015. For ERP images the model must detect short temporal segments, local contrast changes, neighbouring trial rows, and finally larger connected shapes. A CNN is therefore a plausible model for the purpose of image classification.
+Convolutional neural networks (CNNs) are designed to learn local filters and combine them across multiple layers into increasingly abstract image features @LeCun2015. For ERP images, the model must detect short temporal segments, local contrast changes, neighbouring trial rows, and finally larger connected shapes. A CNN is therefore a plausible model for this image-classification task.
 
-Magnostics evaluates their own hand-engineered descriptors for this task of finding patterns in a adjacency matrix @Behrisch2017Magnostics. An ERP image is also an ordered matrix whose interpretable content can appear or disappear when rows are reordered. This thesis uses a CNN instead of a fixed descriptor library, but the model still operates on a particular ordered visual representation.
+Magnostics evaluates hand-engineered descriptors for the related task of finding patterns in an adjacency matrix @Behrisch2017Magnostics. An ERP image is also an ordered matrix whose interpretable content can appear or disappear when rows are reordered. This thesis uses a CNN instead of a fixed descriptor library, but the model still operates on a particular ordered visual representation.
 
-ERP images are not natural photographs, they are more of a heatmap of a matrix. The horizontal axis is time, the vertical axis is a sorted trial index, and the pixel values are trial amplitude. Roy et al. review deep-learning work on EEG and emphasise that performance depends heavily on preprocessing, available labels, validation design, and reproducibility @Roy2019. For this thesis, this means that a strong CNN score is not automatically evidence of a generalised and well optimised model. It may also indicate that the model has learned a simulator artefact, a preprocessing artefact, or a dataset-specific shortcut such as noise or resulution.
+ERP images are not natural photographs; they are more like a heatmap of a matrix. The horizontal axis is time, the vertical axis is a sorted trial index, and the pixel values are trial amplitudes. Roy et al. review deep-learning work on EEG and emphasise that performance depends heavily on preprocessing, available labels, validation design, and reproducibility @Roy2019. For this thesis, this means that a strong CNN score is not automatically evidence of a generalised and well-optimised model. It may also indicate that the model has learned a simulator artefact, a preprocessing artefact, or a dataset-specific shortcut such as noise or resolution.
 
-Biomedical imaging makes the same point from a different direction. nnU-Net uses U-Net-like templates but auto configures preprocessing, network structure, training, and post-processing based dataset properties and validation results @Isensee2021nnUNet. Brain-RetinaNet, in a small MRI tumour-detection setting, that also uses augmentation as a central response to limited labelled data @Iqbal2026BrainRetinaNet. For this thesis, the transferable point is not the medical task itself, but the priority given to data representation, augmentation, and pipeline configuration.
+Biomedical imaging makes the same point from a different direction. nnU-Net uses U-Net-like templates but auto-configures preprocessing, network structure, training, and post-processing based on dataset properties and validation results @Isensee2021nnUNet. Brain-RetinaNet, in a small MRI tumour-detection setting, also uses augmentation as a central response to limited labelled data @Iqbal2026BrainRetinaNet. For this thesis, the transferable point is not the medical task itself, but the priority given to data representation, augmentation, and pipeline configuration.
 
 == Data Simulation and Sim-to-Real Transfer
-The starting point for the simulation work is the label bottleneck. Simulation provides a controlled way to generate labelled ERP data. The goal is not to reproduce full physiological EEG recording, but to generate time-by-trial matrices in which known event timing, component timing, covariates, and noise create interpretable ERP-image patterns @Schepers2025. This enabels a method to deal with scarce real data samples.
+The starting point for the simulation work is the label bottleneck. Simulation provides a controlled way to generate labelled ERP data. The goal is not to reproduce full physiological EEG recordings, but to generate time-by-trial matrices in which known event timing, component timing, covariates, and noise create interpretable ERP-image patterns @Schepers2025. This provides a way to deal with scarce real-data samples.
 
-Each simulation repetition samples a set of global and component-level parameters. The global parameters define the lognormal event-onset process, the number of trials, the sampling rate, and the epoch duration. The component parameters define P100, N170, and P300 basis functions through their widths, hanning window centres, relative gaps, peak offsets, and amplitudes. The component timing is partly dependent by construction. The N170 window follows the P100 window by a sampled gap, analog the P300 window follows the N170 window by another sampled gap. In order to create no class images, the simulated trials are assigned a random trial order.
+Each simulation repetition samples a set of global and component-level parameters. The global parameters define the lognormal event-onset process, the number of trials, the sampling rate, and the epoch duration. The component parameters define P100, N170, and P300 basis functions through their widths, Hanning window centres, relative gaps, peak offsets, and amplitudes. The component timing is partly dependent by construction. The N170 window follows the P100 window by a sampled gap, and analogously the P300 window follows the N170 window by another sampled gap. To create no-class images, the simulated trials are assigned a random trial order.
 
-The preprocessing settings are taken from the same fixation pipeline used for the labelled images. For each selected channel, the post-fixation interval is extracted, trials are sorted by the selected event metadata, each time point is z-scored across trials, a Gaussian low-pass filter is applied with reflective borders, and the resulting trial-by-time matrix is resized to 64x64. The size of the matrix is therefore not a property of the recording itself, but the final model-input resolution produced by preprocessing. It was used to make all ERP images comparable, keep training fast, and retain most of the important visual information.
+The preprocessing settings are taken from the same fixation pipeline used for the labelled images. For each selected channel, the post-fixation interval is extracted, trials are sorted by the selected event metadata, each time point is z-scored across trials, a Gaussian low-pass filter is applied with reflective borders, and the resulting trial-by-time matrix is resized to 64x64. The size of the matrix is therefore not a property of the recording itself, but the final model-input resolution produced by preprocessing. It was chosen to make all ERP images comparable, keep training fast, and retain most of the important visual information.
 
-The main sim-to-real experiments narrow this generator to the binary task of  sigmoid versus no class. This choice was driven by the available real data set at that time. At the beginning of the simulation work, the fixation dataset was already available and defined the real validation target. The simulation settings therefore imitate this dataset as closely as the current generator allowed. That inlcude the sampling rate is fixed to 512 Hz, the trial count to 2508, the epoch length to one second, and the simulated matrices are passed through the same image preprocessing to produce 64x64 single channel images in matrix form. The goal was to create ERP images that resemble the real fixation ERP images in their basic dimensions and preprocessing output, rather than arbitrary simulator examples.
+The main sim-to-real experiments narrow this generator to the binary task of sigmoid versus no class. This choice was driven by the available real dataset at that time. At the beginning of the simulation work, the fixation dataset was already available and defined the real validation target. The simulation settings therefore imitate this dataset as closely as the current generator allowed. That includes a sampling rate fixed at 512 Hz, a trial count of 2508, and an epoch length of one second; the simulated matrices are then passed through the same image preprocessing to produce 64x64 single-channel images in matrix form. The goal was to create ERP images that resemble the real fixation ERP images in their basic dimensions and preprocessing output, rather than arbitrary simulator examples.
 
-TODO Reaseach question is it possible to simulate data and make a cnn overfit to real data? Result it does not. 
+TODO Research question: is it possible to simulate data and make a CNN overfit to real data? Result: it does not.
 
-A six-class simulation setup was considered at first, but handling all visual patterns was unfeasible. In the current simulation design, each simulated ERP image contains all previously mentioned components, so a single image can contain traces of several other classes. Origin for that desicion is that the visual patterns are sensitive to small parameter changes. A slight change in timing, amplitude, or noise can move, deform, or remove a pattern, or produce a shape that no longer matches its usual visual description. Therefore, the final experiments use sigmoid as the only positive ERP-image pattern. It was the most robust against parameter changes of the six simulated morphologies and also the most frequent pattern in the available labelled fixation data.
+A six-class simulation setup was considered at first, but handling all visual patterns was infeasible. In the current simulation design, each simulated ERP image contains all previously mentioned components, so a single image can contain traces of several other classes. The origin of that decision is that the visual patterns are sensitive to small parameter changes. A slight change in timing, amplitude, or noise can move, deform, or remove a pattern, or produce a shape that no longer matches its usual visual description. Therefore, the final experiments use sigmoid as the only positive ERP-image pattern. It was the most robust against parameter changes of the six simulated morphologies and also the most frequent pattern in the available labelled fixation data.
 
-This design choice is important because the class is not encoded by a separate image generator for each pattern. Instead, the same simulated ERP activity can be made to reveal different structures through sorting. The no class label follows the same logic. It is not an empty or all-noise image. It is an ERP image created from the same simulated activity, but with a random trial order, so that the systematic relation between trials and time is removed.
+This design choice is important because the class is not encoded by a separate image generator for each pattern. Instead, the same simulated ERP activity can be made to reveal different structures through sorting. The no-class label follows the same logic. It is not an empty or all-noise image. It is an ERP image created from the same simulated activity, but with a random trial order, so that the systematic relation between trials and time is removed.
 
 The explored simulation setups then vary the onset, component, amplitude, and noise parameter distributions using broad randomisation, Latin hypercube calibration, Monte Carlo random search, and a two-zone mixture of realistic, edge, and stress configurations @Tobin2017, @McKay1979, @Bergstra2012, @Gretton2012.
 
-UnfoldSim is well suited to this role because it simulates continuous event-based time series for EEG and event related signals, rather than only isolated averaged waveforms @Schepers2025.
+UnfoldSim is well suited to this role because it simulates continuous event-based time series for EEG and event-related signals, rather than only isolated averaged waveforms @Schepers2025.
 
-The central challenge is the sim-to-real gap. A strong synthetic performance does not guarantee real-data performance, because the model may learn properties that are specific to the simulator. Domain randomisation addresses this risk by varying simulator parameters so that the real world appears as one possible variant within the window of synthetic distribution @Tobin2017. In this thesis, the same principle applies. If parameters of component widths, latency gaps, amplitudes, basis shapes, or noise levels are varied too aggressively, the target pattern itself becomes implausible or disappears.
+The central challenge is the sim-to-real gap. Strong synthetic performance does not guarantee real-data performance, because the model may learn properties that are specific to the simulator. Domain randomisation addresses this risk by varying simulator parameters so that the real world appears as one possible variant within the window of the synthetic distribution @Tobin2017. In this thesis, the same principle applies. If parameters such as component widths, latency gaps, amplitudes, basis shapes, or noise levels are varied too aggressively, the target pattern itself becomes implausible or disappears.
 
-Increase variation and remain close enough to the real sigmoid morphology is the goal. The exposed search space contains 24 parameter specifications. Because each specification has a mean and a standard deviation, the calibration problem becomes 48-dimensional. Five search strategies and one simulator-first scoring proxy were explored.
+The goal is therefore to increase variation while remaining close enough to the real sigmoid morphology. The exposed search space contains 24 parameter specifications. Because each specification has a mean and a standard deviation, the calibration problem becomes 48-dimensional. Five search strategies and one simulator-first scoring proxy were explored.
 
-Broad random search, or domain randomisation, samples the parameter space as a random exploration baseline, with each parameter given the same weight. 
+Broad random search, or domain randomisation, samples the parameter space as a random exploration baseline, with each parameter given the same weight.
 
-Latin hypercube sampling divides continuous parameter ranges into discrete intervals and combines them through permutations, spreading candidates more evenly across dimensions than ordinary random sampling @McKay1979. 
+Latin hypercube sampling (LHS) divides continuous parameter ranges into discrete intervals and combines them through permutations, spreading candidates more evenly across dimensions than ordinary random sampling @McKay1979.
 
 As a naive parameter-search attempt, a heterogeneity experiment scaled the standard deviations of normally distributed parameters to 50%, 100%, and 1000% of the corresponding mean magnitudes.
 
-Monte Carlo random search provides a simple comparison by uniformly sampling one parameter at a time, and remains defensible because random search is a strong baseline for high-dimensional hyperparameter spaces @Bergstra2012. 
+Monte Carlo random search provides a simple comparison by uniformly sampling one parameter at a time, and remains defensible because random search is a strong baseline for high-dimensional hyperparameter spaces @Bergstra2012.
 
 The two-zone mixture uses 70% of the best parameters from the LHS baseline and 30% edge-case configurations.
 
@@ -724,7 +676,7 @@ A second line of related work studies how overlapping events should be handled i
 
 Deep learning provides the classification background. CNNs have already been used successfully for EEG decoding and for P300 detection. EEG-specific models such as DeepConvNet and EEGNet show that convolutional architectures can learn useful temporal and spatial filters from EEG data @Cecotti2011P300CNN, @Schirrmeister2017DeepConvNet, @Lawhern2018EEGNet. The present task is different. The model does not predict a stimulus class or a brain-computer interface (BCI) command, but whether an ERP image contains a named visual morphology.
 
-Label Studio provides a practical environment for that workflow of manual labelling, but the labels still depend on human judgement @LabelStudio. This makes annotation quality important, agreement statistics are beneficial to deal with that @Artstein2008InterCoderAgreement, @Hallgren2012InterRaterKappa.
+Label Studio provides a practical environment for that workflow of manual labelling, but the labels still depend on human judgement @LabelStudio. This makes annotation quality important; agreement statistics help to quantify it @Artstein2008InterCoderAgreement, @Hallgren2012InterRaterKappa.
 
 Self-supervised and semi-supervised learning offer a complementary path. Instead of relying only on labelled images, an image encoder can learn from unlabelled ERP images and then use the smaller labelled set more efficiently. Pretraining based on the Simple Framework for Contrastive Learning of Visual Representations (SimCLR) learns an image encoder from augmented views @Chen2020, and confidence-based pseudo-labelling adds unlabelled examples only when the model predicts them with high confidence @Sohn2020. This idea has also been explored directly for EEG representations @Banville2021SelfSupervisedEEG.
 
@@ -738,7 +690,7 @@ Self-supervised and semi-supervised learning offer a complementary path. Instead
 This chapter describes the real and simulated data sources, the annotation workflow, the ERP-image preprocessing pipeline, the model-training setup, and the evaluation protocol.
 
 == Datasets, Annotation, and Task Definition
-The labelled real-data pool used for this thesis consists of the following datasets that were already available in processed or documented analysis-ready form. When processed derivatives were provided, these were used directly. When a source was available only as raw material, it was prepared according to the authors' provided code or processing recommendations before being converted into the common ERP-image format used in this thesis. All of the data sources have gone throw manual inspection an review. Goal is that the cnn model therefore trains on derived ERP-image inputs rather than raw or otherwise unprocessed recordings.
+The labelled real-data pool used for this thesis consists of the following datasets, which were already available in processed or documented analysis-ready form. When processed derivatives were provided, these were used directly. When a source was available only as raw material, it was prepared according to the authors' provided code or processing recommendations before being converted into the common ERP-image format used in this thesis. All of the data sources have gone through manual inspection and review. The goal is that the CNN model therefore trains on derived ERP-image inputs rather than raw or otherwise unprocessed recordings.
 
 The Reference Fixation Dataset provides the main fixation-locked ERP-image source (TODO citation).
 
@@ -748,7 +700,7 @@ The Event-Related Potential CORE N2pc source contributes visual-attention epochs
 
 The Kilo-Word Event-Related Potential Database contributes word-level event-related potential averages from a lexical-decision study together with word-property variables @Dufau2015KiloWordERP, @KiloWordERPOSF.
 
-The EYE-EEG Reading source contributes fixation-locked natural-reading examples from the EYE-EEG test-data collection with EyeLink-to-electroencephalography synchronization metadata @Dimigen2011Coregistration, @Dimigen2021EyeEEGTestData.
+The EYE-EEG Reading source contributes fixation-locked natural-reading examples from the EYE-EEG test-data collection with EyeLink-to-electroencephalography synchronisation metadata @Dimigen2011Coregistration, @Dimigen2021EyeEEGTestData.
 
 The EYE-EEG Freeviewing source contributes fixation-locked visual-search examples with synchronized eye-tracking and EEG recordings @Dimigen2021EyeEEGTestData.
 
@@ -762,29 +714,29 @@ The Unfold face free-viewing source contributes saccade-locked free-viewing data
 
 The Natural Object Dataset EEG source contributes visual-object-recognition epochs @Zhang2025NODEEG, @NODEEGOpenNeuro.
 
-TODO add annotation process, first overview, then sort by model confidence, select few samples to test if suiatable for thesis, select 200 more and test what sorting variables can potentialy create patterns. Keep sorting variabels that contained at least one pattern and label all available channels from each of them.
+TODO add annotation process, first overview, then sort by model confidence, select few samples to test if suitable for thesis, select 200 more and test what sorting variables can potentially create patterns. Keep sorting variables that contained at least one pattern and label all available channels from each of them.
 
 #pattern-decision-tree <fig:pattern-decision-tree>
 
 == Data Simulation and Preprocessing
-Several preprocessing choices were explored. The exploratory comparisons for the re-size function include nearest-neighbour, linear, quadratic, cubic, and Lanczos resizing. For the image pipeline, it was tested with and without Gaussian smoothing. For the performance aspect tested z-scoring before versus after resizing. For encoding value binning in the ERP matrix and input resolutions from 16x16 to 256x256. In addition multiple visual noise reduction filters where tested. TODO create research questions from that with motivation for each.
+Several preprocessing choices were explored. The exploratory comparisons for the resize function include nearest-neighbour, linear, quadratic, cubic, and Lanczos resizing. The image pipeline was tested with and without Gaussian smoothing. For the performance aspect, z-scoring was tested before versus after resizing. Value binning in the ERP matrix was tested together with input resolutions from 16x16 to 256x256. In addition, multiple visual noise-reduction filters were tested. TODO create research questions from that with motivation for each.
 
-The best performing pipeline sorts trials, applies per-timepoint z-scoring, applies Gaussian smoothing filtering, and resizes the image matrix.
+The best performing pipeline sorts trials, applies per-timepoint z-scoring, applies Gaussian smoothing, and resizes the image matrix.
 
-Therefore the preprocessing and training pipeline is treated as a structured configuration problem rather than a fixed background step. This follows the general lesson from nnU-Net: some choices should stay fixed for comparability, some can follow dataset properties, and others require empirical validation @Isensee2021nnUNet. In this thesis, the image pipeline, class balancing, augmentation, and model training form that empirical design space. Additional variants combine augmentation with different filtering, denoising, contrast, and resizing choices. They help narrow the design space.
+The preprocessing and training pipeline is therefore treated as a structured configuration problem rather than a fixed background step. This follows the general lesson from nnU-Net: some choices should stay fixed for comparability, some can follow dataset properties, and others require empirical validation @Isensee2021nnUNet. In this thesis, the image pipeline, class balancing, augmentation, and model training form that empirical design space. Additional variants combine augmentation with different filtering, denoising, contrast, and resizing choices. They help to narrow the design space.
 
-todo RESULT TABEL overview
+todo RESULT TABLE overview
 
 == Calibration, Models, and Training
-The classifier comparison uses binary CNN baselines with one, three, and ten convolutional layers, together with a pretrained ResNet18 model @He2016ResNet. ResNet is useful here because residual connections make a deeper image classifier easier to optimise while still providing a standard computer vision baseline for comparison. Having the best practices already implemented and not figuring them out, makes it easier to focus on the classification and preprocessing of the ERP images.
+The classifier comparison uses binary CNN baselines with one, three, and ten convolutional layers, together with a pretrained ResNet18 model @He2016ResNet. ResNet is useful here because residual connections make a deeper image classifier easier to optimise, while still providing a standard computer-vision baseline for comparison. Having the best practices already implemented, rather than figuring them out from scratch, makes it easier to focus on the classification and preprocessing of the ERP images.
 
-Because labelled ERP images are scarce, augmentation is evaluated as part of the training design.Brain-RetinaNet is a domain-distant but useful reference point. In a small labelled MRI detection dataset, Iqbal et al. use targeted augmentation to address limited sample availability and report improvements across several detector backbones @Iqbal2026BrainRetinaNet. The analogy is limited to the data regime, but it supports treating class-aware ERP-image augmentation and class balancing as central training decisions.
+Because labelled ERP images are scarce, augmentation is evaluated as part of the training design. Brain-RetinaNet is a domain-distant but useful reference point. On a small labelled MRI detection dataset, Iqbal et al. use targeted augmentation to address limited sample availability and report improvements across several detector backbones @Iqbal2026BrainRetinaNet. The analogy is limited to the data regime, but it supports treating class-aware ERP-image augmentation and class balancing as central training decisions.
 
 == Evaluation Protocol
-Performance metrics: accuracy, balanced
+Performance metrics include accuracy, balanced
 accuracy, macro F1, precision, recall, and timing summaries under five-fold
 cross-validation. This gives us a consistent framework for comparing model
-families, preprocessing variants, and class-balancing strategies, as well as augmenting.
+families, preprocessing variants, class-balancing strategies, and augmentation strategies.
 
 
 // ----------------------------------------------------------------------------
@@ -795,15 +747,15 @@ families, preprocessing variants, and class-balancing strategies, as well as aug
 = Results <chp:results>
 
 == Data Simulation and Calibration Results
-TABEL to do
+TABLE to do
 per model, per explored adjustment
-classification on simulated data is perfect, on real data lacks behind the real approach.
+classification on simulated data is perfect, on real data lags behind the real approach.
 
-== Classification Performance Real Data
-TABEL
+== Classification Performance on Real Data
+TABLE
 for each model and the tested settings
 
-== Cross-Dataset Generalization
+== Cross-Dataset Generalisation
 TODO MORE DATA
 work in progress
 
@@ -819,22 +771,22 @@ work in progress
 
 
 == Limitations
-The main limitation of this thesis is the sim-to-real gap. The simulator can generate labelled ERP images in large numbers, but it can only generate the kind of variability that was built into it. Real EEG also contains subject-specific responses, non-stationary noise, artefacts, imperfect event timing, and preprocessing effects. This means that strong performance on synthetic images is not enough to show that the model has learned a real ERP-image pattern @Krol2018SEREEGA @Schepers2025. The weak transfer result should therefore be read as a genuine limitation of the setup, not just as a tuning problem.
+The main limitation of this thesis is the sim-to-real gap. The simulator can generate labelled ERP images in large numbers, but it can only generate the kind of variability that was built into it. Real EEG also contains subject-specific responses, non-stationary noise, artefacts, imperfect event timing, and preprocessing effects. This means that strong performance on synthetic images is not enough to show that the model has learned a real ERP-image pattern @Krol2018SEREEGA, @Schepers2025. The weak transfer result should therefore be read as a genuine limitation of the setup, not just as a tuning problem.
 
-A related risk is shortcut learning. CNNs often use whichever visual regularity is easiest for the training objective, even if that regularity is not the intended concept @Geirhos2020ShortcutLearning. In this project, such shortcuts could come from simulator-specific smoothness, noise texture, colour scaling, or unusually clean pattern boundaries. Domain randomisation is meant to reduce that risk by varying the synthetic world, but it cannot remove it completely @Tobin2017. Same applies for the chosen augmentation steps, all of the tesed cnn models can detect and perfectly decide if a high or low resolution matrix was sclaed down to the same target size.
+A related risk is shortcut learning. CNNs often exploit whichever visual regularity is easiest for the training objective, even if that regularity is not the intended concept @Geirhos2020ShortcutLearning. In this project, such shortcuts could come from simulator-specific smoothness, noise texture, colour scaling, or unusually clean pattern boundaries. Domain randomisation is meant to reduce that risk by varying the synthetic world, but it cannot remove it completely @Tobin2017. The same applies to the chosen augmentation steps: all of the tested CNN models can detect and perfectly decide whether a high- or low-resolution matrix was scaled down to the same target size.
 
-The manual labels are another limitation. The real-data evaluation uses only a limited number of manually labelled ERP images, and visual pattern labels are not as objective as event markers or stimulus classes. Borderline cases can reasonably be judged differently, for instance when a weak and noisy sigmoid appears. Reliability measures are normally used to quantify such disagreement when several raters label the same material @Artstein2008InterCoderAgreement @Hallgren2012InterRaterKappa. Without that type of agreement analysis, disagreement between the classifier and the labels cannot always be interpreted as model error alone.
+The manual labels are another limitation. The real-data evaluation uses only a limited number of manually labelled ERP images, and visual pattern labels are not as objective as event markers or stimulus classes. Borderline cases can reasonably be judged differently, for instance when a weak and noisy sigmoid appears. Reliability measures are normally used to quantify such disagreement when several raters label the same material @Artstein2008InterCoderAgreement, @Hallgren2012InterRaterKappa. Without that type of agreement analysis, disagreement between the classifier and the labels cannot always be interpreted as model error alone.
 
 The results are also conditional on the chosen preprocessing pipeline. Sorting, z-scoring, smoothing, and resizing all change the image seen by the CNN. This is not a minor technical detail. ERP methods research shows that reasonable processing choices can lead to different measurements and conclusions @Clayson2021ERPMultiverse.
 
-TODO add more, Computational power is fine. Maybe the ones form midterm and proposal. 
+TODO add more, computational power is fine. Maybe the ones from midterm and proposal.
 
 == Future Work
-One useful next step is a non-CNN baseline for the same ordered-matrix task. TODO transfromer modell
+One useful next step is a non-CNN baseline for the same ordered-matrix task. TODO transformer model
 
-A second extension is localisation. The current classifier assigns one label to an entire ERP image, so it cannot mark where a pattern starts, ends, or overlaps with another structure. Detection-style biomedical imaging work such as Brain-RetinaNet shows how convolutional models can move from image-level classification toward localising relevant regions @Iqbal2026BrainRetinaNet. For ERP images, such a shift would require labels for pattern extents in trial-time space, not only image-level labels.
+A second extension is localisation. The current classifier assigns one label to an entire ERP image, so it cannot mark where a pattern starts, ends, or overlaps with another structure. Detection-style biomedical imaging work such as Brain-RetinaNet shows how convolutional models can move from image-level classification towards localising relevant regions @Iqbal2026BrainRetinaNet. For ERP images, such a shift would require labels for pattern extents in trial-time space, not only image-level labels.
 
-To do augmentation is very important. Maybe simulate data for specific real data set.
+Augmentation is very important. One option is to simulate data for a specific real dataset.
 
 // ----------------------------------------------------------------------------
 // Chapter 6 - End with direct answers, not a second discussion.
