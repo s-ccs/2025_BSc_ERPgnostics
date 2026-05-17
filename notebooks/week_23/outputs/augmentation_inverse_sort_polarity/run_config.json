@@ -1,0 +1,61 @@
+{
+    "created_at": "2026-05-12T18:38:48.784",
+    "lr": 0.0003,
+    "nepochs": 8,
+    "n_augmented_images": 18596,
+    "output_dir": "/home/benjamin/Dokumente/BA2/notebooks/week_23/outputs/augmentation_inverse_sort_polarity",
+    "target_size": [
+        64,
+        64
+    ],
+    "excluded_dataset_keys": [
+        "02_new_eeget_rsod"
+    ],
+    "architecture": "ResNet18 single-channel, ImageNet-pretrained first convolution projected to 1 channel",
+    "annotations_csv": "/home/benjamin/Dokumente/BA2/notebooks/week_21/labelstudio_annotations_all.csv",
+    "fold_policy": "stratified by the 7 manual labels and augmentation type; the four variants from each base mod-split image are assigned to distinct folds when k_folds >= 4",
+    "lowpass_kernel_size": [
+        21,
+        21
+    ],
+    "k_folds": 5,
+    "target_trials_source": "WEEK23_TARGET_TRIALS environment variable, default 200",
+    "no_class_chunks_per_origin": 1,
+    "augmentation_policy": "sort trials, build floor(n / target_trials) round-robin mod-split chunks, distribute remainder trials one per round into a separate remainder chunk, fill that remainder chunk to target_trials with deterministic random unique trials from the same origin; positive rows keep all chunks, no_class rows keep one deterministic chunk by default; each kept chunk is rendered as reference, inverse_sort, inverse_polarity, and inverse_sort_inverse_polarity",
+    "n_base_mod_images": 4649,
+    "minimum_origin_trials": 297,
+    "augmentation_variants": [
+        {
+            "label": "normal sort, normal polarity",
+            "name": "reference",
+            "inverse_polarity": false,
+            "inverse_sort": false
+        },
+        {
+            "label": "inverse sort, normal polarity",
+            "name": "inverse_sort",
+            "inverse_polarity": false,
+            "inverse_sort": true
+        },
+        {
+            "label": "normal sort, inverse polarity",
+            "name": "inverse_polarity",
+            "inverse_polarity": true,
+            "inverse_sort": false
+        },
+        {
+            "label": "inverse sort, inverse polarity",
+            "name": "inverse_sort_inverse_polarity",
+            "inverse_polarity": true,
+            "inverse_sort": true
+        }
+    ],
+    "n_labeled_rows_used": 2869,
+    "lowpass_sigma": 75,
+    "target_trials": 200,
+    "task": "binary ERP pattern class vs no_class",
+    "filter_border": "reflect",
+    "preprocessing": "variant sort direction and polarity on raw fixed-trial chunk -> zscore_timepoints -> Gaussian smoothing -> resize to 64x64",
+    "model_name": "resnet18_pretrained_labeled_erp_inverse_sort_polarity_binary",
+    "seed": 20260512
+}

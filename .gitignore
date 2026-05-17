@@ -39,6 +39,7 @@ docs/site/
 *.hdf5
 *.csv
 *.png
+*.svg
 *.eeg
 *.vhdr
 *.vmrk
