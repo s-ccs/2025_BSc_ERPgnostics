@@ -40,6 +40,34 @@
   ..args,
 )
 
+#let rq-counter = counter("research-question")
+#let subrq-counter = counter("research-subquestion")
+
+#let research-question(title, question) = {
+  rq-counter.step()
+  subrq-counter.update(0)
+  block(
+    above: .7em,
+    below: .25em,
+    [
+      #strong[RQ#context rq-counter.display(): #title.] #question
+    ],
+  )
+}
+
+#let sub-research-question(title, question) = {
+  subrq-counter.step()
+  block(
+    inset: (left: 1.4em),
+    above: .2em,
+    below: .2em,
+    [
+      #strong[RQ#context rq-counter.display().#context subrq-counter.display(): #title.]
+      #question
+    ],
+  )
+}
+
 // if you have appendices, add them here
 #let appendix = [
   = Appendices
@@ -422,10 +450,10 @@
       #place(top + center, dx: -34.5mm, dy: 48mm)[
         #block(width: 83mm, height: 83mm, fill: rgb("#f5efe5"), radius: 2.5pt)[]
       ]
-      #place(top + center, dx: 39mm, dy: 48mm)[
-        #block(width: 62mm, height: 83mm, fill: rgb("#eaf1f8"), radius: 2.5pt)[]
+      #place(top + center, dx: 44mm, dy: 48mm)[
+        #block(width: 72mm, height: 83mm, fill: rgb("#eaf1f8"), radius: 2.5pt)[]
       ]
-      #place(top + center, dx: -5.8mm, dy: 1mm)[
+      #place(top + center, dx: 1.5mm, dy: 1mm)[
         #set text(size: 8.8pt)
         #scale(64%, reflow: true)[
           #diagram(
@@ -472,8 +500,8 @@
             ),
             edge((3.05, 8.0), (1.75, 10.6), "-|>", [Yes], label-pos: 0.55),
             node((1.75, 10.6), align(center)[Sigmoid], width: 17mm, corner-radius: 1.5pt),
-            edge((3.05, 8.0), (3.55, 10.6), "-|>", [No], label-pos: 0.55),
-            node((3.55, 10.6), align(center)[No class], width: 20mm, corner-radius: 1.5pt),
+            edge((3.05, 8.0), (3.30, 10.6), "-|>", [No], label-pos: 0.55),
+            node((3.30, 10.6), align(center)[No class], width: 20mm, corner-radius: 1.5pt),
 
             edge((0, 3.6), (-2.2, 5.8), "-|>", [No], label-pos: 0.45),
             node(
@@ -508,12 +536,12 @@
               shape: shapes.diamond,
               width: 18mm,
             ),
-            edge((-1.45, 9.6), (-2.15, 12.0), "-|>", [Yes], label-pos: 0.55),
-            node((-2.15, 12.0), align(center)[Hourglass bar], width: 24mm, corner-radius: 1.5pt),
-            edge((-1.45, 9.6), (-1.10, 12.0), "-|>", [No], label-pos: 0.55),
-            node((-1.10, 12.0), align(center)[Diverging bar], width: 24mm, corner-radius: 1.5pt),
-            edge((-1.35, 8.0), (-0.15, 8.85), "-|>", [No], label-pos: 0.42),
-            node((-0.15, 8.85), align(center)[No class], width: 18mm, corner-radius: 1.5pt),
+            edge((-1.45, 9.6), (-2.15, 11.6), "-|>", [Yes], label-pos: 0.55),
+            node((-2.15, 11.6), align(center)[Hourglass bar], width: 24mm, corner-radius: 1.5pt),
+            edge((-1.45, 9.6), (-1.10, 11.6), "-|>", [No], label-pos: 0.55),
+            node((-1.10, 11.6), align(center)[Diverging bar], width: 24mm, corner-radius: 1.5pt),
+            edge((-1.35, 8.0), (-0.45, 8.85), "-|>", [No], label-pos: 0.42),
+            node((-0.45, 8.85), align(center)[No class], width: 18mm, corner-radius: 1.5pt),
           )
         ]
       ]
@@ -526,7 +554,7 @@
           #text(size: 7pt, weight: "semibold", fill: rgb("#6f5f43"))[Vertical or widening]
         ]
       ]
-      #place(top + center, dx: 59mm, dy: 49.7mm)[
+      #place(top + center, dx: 64mm, dy: 49.7mm)[
         #box(
           inset: (x: 1.6mm, y: 0.8mm),
           fill: rgb("#eaf1f8"),
@@ -538,7 +566,7 @@
     ]
   ],
   caption: [
-    First draft of a manual decision tree for ERP image patterns. TODO align, more explanation
+    Manual decision tree for ERP image patterns. TODO more explanation
   ],
 )
 
@@ -579,9 +607,65 @@ This thesis focuses on the automated approach to find visual patterns in ERP ima
 The project therefore also uses simulation to create labelled training data under controlled assumptions. UnfoldSim.jl is used to simulate continuous event-based EEG-like time series, which can then be rendered as ERP images @Schepers2025. One central question follows directly from this setup: can a model trained on simulated ERP images recognise the same kind of pattern in manually labelled real data?
 
 == Research Questions and Contributions
-// State the main research question, sketch the sim-to-real idea at a high
-// level, and list the concrete contributions of the thesis.
-// Mention the reduced scope here as part of the framing.
+
+This thesis investigates whether visual ERP-image patterns can be detected automatically with convolutional neural networks, and whether simulated ERP images can reduce the need for manually labelled real data. The work is guided by the following research questions.
+
+#research-question(
+  [Sim-to-real transfer],
+  [Can a CNN trained on simulated sigmoid ERP images recognise sigmoid patterns
+  in manually labelled real ERP images?],
+)
+
+#sub-research-question(
+  [Synthetic learnability],
+  [Can the simulated sigmoid versus no-class task be learned reliably by CNN
+  models?],
+)
+
+#sub-research-question(
+  [Real-data transfer],
+  [How well do models trained on simulated ERP images perform when evaluated on
+  manually labelled real ERP images?],
+)
+
+#sub-research-question(
+  [Simulator calibration],
+  [Do parameter-search strategies such as broad randomisation, Latin hypercube
+  sampling, Monte Carlo search, two-zone mixtures, or feature-distance scoring
+  reduce the sim-to-real gap?],
+)
+
+#research-question(
+  [Real-data ERP-image classification],
+  [Which training and preprocessing choices improve CNN-based classification of
+  manually labelled ERP images?],
+)
+
+#sub-research-question(
+  [Preprocessing],
+  [How do resizing, z-scoring, Gaussian smoothing, input resolution, and
+  filtering affect classification performance?],
+)
+
+#sub-research-question(
+  [Augmentation and class imbalance],
+  [Do ERP-specific augmentations or imbalance-handling strategies improve
+  balanced accuracy and macro-F1?],
+)
+
+#sub-research-question(
+  [Model and training strategy],
+  [How do supervised training, self-supervised pretraining, and
+  semi-self-supervised pseudo-labelling compare on the labelled real-data task?],
+)
+
+The main contributions of this thesis are:
+
+1. A manually labelled ERP-image dataset covering several visual pattern morphologies and a no-class category.
+2. A simulation-based pipeline for generating sigmoid and no-class ERP images with controlled parameters.
+3. An empirical comparison of preprocessing, augmentation, imbalance handling, supervised learning, self-supervised learning, and semi-self-supervised learning for ERP-image classification.
+4. An evaluation of the sim-to-real gap between synthetic ERP-image training data and manually labelled real ERP images.
+
 
 == Thesis Structure
 // Briefly guide the reader through the remaining chapters.
