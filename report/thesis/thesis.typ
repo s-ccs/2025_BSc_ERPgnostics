@@ -40,34 +40,6 @@
   ..args,
 )
 
-#let rq-counter = counter("research-question")
-#let subrq-counter = counter("research-subquestion")
-
-#let research-question(title, question) = {
-  rq-counter.step()
-  subrq-counter.update(0)
-  block(
-    above: .7em,
-    below: .25em,
-    [
-      #strong[RQ#context rq-counter.display(): #title.] #question
-    ],
-  )
-}
-
-#let sub-research-question(title, question) = {
-  subrq-counter.step()
-  block(
-    inset: (left: 1.4em),
-    above: .2em,
-    below: .2em,
-    [
-      #strong[RQ#context rq-counter.display().#context subrq-counter.display(): #title.]
-      #question
-    ],
-  )
-}
-
 // if you have appendices, add them here
 #let appendix = [
   = Appendices
@@ -375,17 +347,82 @@
 // 'short' is the abbreviation (what will be shown in the pdf on all references except the first)
 // 'long' is the full acronym expansion (what will be shown in the first reference of the document)
 //
-// In the text, call @eeg or @uniS to reference  the shortcode
+// In the text, call entries such as @eeg or @cnn to reference the shortcode.
 #let abbreviations = (
+  (
+    key: "bacc",
+    short: "BAcc",
+    long: "Balanced accuracy",
+  ),
+  (
+    key: "bci",
+    short: "BCI",
+    long: "Brain-computer interface",
+  ),
+  (
+    key: "cnn",
+    short: "CNN",
+    long: "Convolutional neural network",
+  ),
   (
     key: "eeg",
     short: "EEG",
     long: "Electroencephalography",
   ),
   (
-    key: "uniS",
-    short: "UoS",
-    long: "University of Stuttgart",
+    key: "erp",
+    short: "ERP",
+    long: "Event-related potential",
+  ),
+  (
+    key: "lhs",
+    short: "LHS",
+    long: "Latin hypercube sampling",
+  ),
+  (
+    key: "macro-f1",
+    short: "Macro-F1",
+    long: "Macro-averaged F1 score",
+  ),
+  (
+    key: "mmd",
+    short: "MMD",
+    long: "Maximum mean discrepancy",
+  ),
+  (
+    key: "mri",
+    short: "MRI",
+    long: "Magnetic resonance imaging",
+  ),
+  (
+    key: "osf",
+    short: "OSF",
+    long: "Open Science Framework",
+  ),
+  (
+    key: "rbf",
+    short: "RBF",
+    long: "Radial basis function",
+  ),
+  (
+    key: "resnet",
+    short: "ResNet",
+    long: "Residual neural network",
+  ),
+  (
+    key: "semi-ssl",
+    short: "Semi-SSL",
+    long: "Semi-self-supervised learning",
+  ),
+  (
+    key: "simclr",
+    short: "SimCLR",
+    long: "Simple Framework for Contrastive Learning of Visual Representations",
+  ),
+  (
+    key: "ssl",
+    short: "SSL",
+    long: "Self-supervised learning",
   ),
 )
 
@@ -610,66 +647,44 @@ The project therefore also uses simulation to create labelled training data unde
 
 This thesis investigates whether visual ERP-image patterns can be detected automatically with convolutional neural networks, and whether simulated ERP images can reduce the need for manually labelled real data. The work is guided by the following research questions.
 
-#research-question(
-  [Sim-to-real transfer],
-  [Can a CNN trained on simulated sigmoid ERP images recognise sigmoid patterns
-  in manually labelled real ERP images?],
-)
 
-#sub-research-question(
-  [Synthetic learnability],
-  [Can the simulated sigmoid versus no-class task be learned reliably by CNN
-  models?],
-)
+#[
+  #set enum(
+    numbering: (..nums) => strong[RQ#(nums.pos().map(str).join(".")):],
+    full: true,
+    tight: false,
+    indent: 0pt,
+    spacing: .7em,
+    body-indent: .65em,
+  )
 
-#sub-research-question(
-  [Real-data transfer],
-  [How well do models trained on simulated ERP images perform when evaluated on
-  manually labelled real ERP images?],
-)
+  + *Sim-to-real transfer* How accurately and efficiently can a CNN model trained on simulated ERP images detect and distinguish relevant spatio-temporal patterns in real-world ERP images?
 
-#sub-research-question(
-  [Simulator calibration],
-  [Do parameter-search strategies such as broad randomisation, Latin hypercube
-  sampling, Monte Carlo search, two-zone mixtures, or feature-distance scoring
-  reduce the sim-to-real gap?],
-)
+    + *Sim-to-real sigmoid* Can a CNN trained on simulated sigmoid ERP images recognise sigmoid patterns in manually labelled real ERP images?
 
-#research-question(
-  [Real-data ERP-image classification],
-  [Which training and preprocessing choices improve CNN-based classification of
-  manually labelled ERP images?],
-)
+    + *Simulator calibration* How does simulator calibration affect sim-to-real transfer and what performance gap remains compared with training on real labelled ERP images?
+  
+  + *Manual labeling* How accurately and efficiently can CNNs detect visual ERP-image patterns when they are trained on manually labelled real ERP images?
 
-#sub-research-question(
-  [Preprocessing],
-  [How do resizing, z-scoring, Gaussian smoothing, input resolution, and
-  filtering affect classification performance?],
-)
+    + *Preprocessing* Which training and preprocessing choices improve CNN-based classification of manually labelled ERP images?
 
-#sub-research-question(
-  [Augmentation and class imbalance],
-  [Do ERP-specific augmentations or imbalance-handling strategies improve
-  balanced accuracy and macro-F1?],
-)
+    + *Augmentation and class imbalance* Do ERP-specific augmentations or imbalance-handling strategies improve CNN model performance?
 
-#sub-research-question(
-  [Model and training strategy],
-  [How do supervised training, self-supervised pretraining, and
-  semi-self-supervised pseudo-labelling compare on the labelled real-data task?],
-)
+    + *Model choice and training strategy* Which model architecture and training regime provide the best accuracy-efficiency trade-off for manually labelled real ERP-image classification?
+
+]
 
 The main contributions of this thesis are:
 
-1. A manually labelled ERP-image dataset covering several visual pattern morphologies and a no-class category.
-2. A simulation-based pipeline for generating sigmoid and no-class ERP images with controlled parameters.
-3. An empirical comparison of preprocessing, augmentation, imbalance handling, supervised learning, self-supervised learning, and semi-self-supervised learning for ERP-image classification.
-4. An evaluation of the sim-to-real gap between synthetic ERP-image training data and manually labelled real ERP images.
+1. A manually labelled real ERP-image dataset from multiple EEG/ERP sources, covering several visual pattern.
+2. A simulation pipeline for generating controlled sigmoid and no-class ERP images, together with calibration experiments for sim-to-real transfer.
+3. A comparison of preprocessing choices, augmentation, imbalance handling, model choice and model training set-ups.
+
 
 
 == Thesis Structure
-// Briefly guide the reader through the remaining chapters.
 
+is it necessary?
 
 // ----------------------------------------------------------------------------
 // Chapter 2 - Provide the conceptual basis and position the thesis briefly in
@@ -773,15 +788,36 @@ Each simulation run samples a set of global and component-level parameters. The 
 === ERP-Image Output
 The preprocessing settings are taken from the same fixation pipeline used for the labelled images. For each selected channel, the post-fixation interval is extracted, trials are sorted by the selected event metadata, each time point is z-scored across trials, a Gaussian low-pass filter is applied with reflective borders, and the resulting trial-by-time matrix is resized to 64x64. The size of the matrix is therefore not a property of the recording itself, but the final model-input resolution produced by preprocessing. It was chosen to make all ERP images comparable, keep training fast, and retain most of the important visual information.
 
-For the sim-to-real evaluation, the generator is used only for the binary task sigmoid versus no class. This restriction follows from the project state when the simulation stage was designed. The labelled fixation dataset was the available real-data target, and sigmoid was both frequent in that dataset and stable to create in the simulator.
+For the sim-to-real evaluation, the generator is used only for the binary task
+sigmoid versus no class. This restriction is a feasibility choice. The labelled
+fixation dataset was the available real-data target, and sigmoid was both
+frequent in that dataset and stable to create in the simulator.
 
-The simulation settings therefore imitate this dataset as closely as the current generator allowed. That includes a sampling rate fixed at 512 Hz, a trial count of 2508, and an epoch length of one second; the simulated matrices are then passed through the same image preprocessing to produce 64x64 single-channel images in matrix form. The goal was to create ERP images that resemble the real fixation ERP images in their basic dimensions and preprocessing output, rather than arbitrary simulator examples.
+The simulation settings therefore use this fixation dataset as the first target
+distribution. That includes a sampling rate fixed at 512 Hz, a trial count of
+2508, and an epoch length of one second; the simulated matrices are then passed
+through the same image preprocessing to produce 64x64 single-channel images in
+matrix form. The goal is to create ERP images that resemble real fixation ERP
+images in their basic dimensions and preprocessing output, rather than arbitrary
+simulator examples.
 
+This setup leads directly to RQ 1.1. A CNN can only be useful here if the
+simulated sigmoid/no-class distinction corresponds to the same visual
+distinction in manually labelled real ERP images. High performance on simulated
+images alone would only show that the generator creates a learnable synthetic
+task. It would not show that the learned decision rule captures the intended
+real ERP-image morphology.
 
-
-
-
-TODO Research question: is it possible to simulate data and make a CNN overfit to real data? Result: it does not.
+The sim-to-real experiment therefore treats simulation as a proposed substitute
+for part of the manual labelling effort. The model first learns from simulated
+examples whose labels are known by construction, and is then evaluated on
+manually labelled real ERP images. This makes the experiment a transfer test:
+if the simulated images are close enough to the real sigmoid morphology, the
+model should recognise the real pattern without being trained on real labels.
+If the model instead relies on simulator-specific regularities, the transfer
+performance will reveal that gap. This single-dataset comparison cannot prove
+general transfer, but it establishes whether the simulation is close enough to a
+real target to justify broader tests.
 
 === Simulated Class Definition
 A six-class simulation setup was considered at first, but handling all visual patterns was infeasible. In the current simulation design, each simulated ERP image contains all previously mentioned components, so a single image can contain traces of several other classes. The origin of that decision is that the visual patterns are sensitive to small parameter changes. A slight change in timing, amplitude, or noise can move, deform, or remove a pattern, or produce a shape that no longer matches its usual visual description. Therefore, the final experiments use sigmoid as the only positive ERP-image pattern. It was the most robust against parameter changes of the six simulated morphologies and also the most frequent pattern in the available labelled fixation data.
