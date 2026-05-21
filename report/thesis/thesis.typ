@@ -41,306 +41,7 @@
 )
 
 // if you have appendices, add them here
-#let appendix = [
-  = Appendices
-
-  #set par(justify: false)
-
-
-  == Short Definitions of the Main Experimental Terms
-
-  #set text(size: 9pt)
-  #appendix-term-table(
-    [*Term*], [*Meaning in this thesis*],
-
-    [Supervised learning], [
-      Train the classifier only on real labelled ERP images. No pseudo-labels
-      are added.
-    ],
-    [Self-supervised learning (SSL)], [
-      Pretrain the encoder without class labels. In this project that stage is
-      contrastive learning following the Simple Framework for Contrastive
-      Learning of Visual Representations (SimCLR) on ERP images.
-    ],
-    [Linear probe], [
-      Freeze the SSL encoder and train only a new classifier head on labelled
-      ERP images.
-    ],
-    [Fine-tuning], [
-      Update the full pretrained model on labelled ERP images so the learned
-      representation adapts to the task.
-    ],
-    [Semi-self-supervised learning], [
-      Use SSL first, then extend later training with pseudo-labelled examples
-      from an unlabelled pool.
-    ],
-    [Pseudo-labelling], [
-      Predict labels for unlabelled ERP images and keep only the high-confidence
-      predictions as temporary training labels.
-    ],
-    [Trainfold images], [
-      Use only ERP images from the current training folds as SSL input. The
-      validation fold stays unseen.
-    ],
-    [Same-dataset mod-4 pool], [
-      A larger unlabelled ERP-image pool from the same fixation dataset,
-      generated with the same mod-4 policy.
-    ],
-    [Mod-4 split], [
-      Split the sorted trials into four modulo parts. In week 18, pattern
-      contributes 4 parts and no pattern contributes 1 part.
-    ],
-    [Grouped 5-fold cross-validation], [
-      Samples from the same original ERP source stay in the same fold to avoid
-      train/validation leakage.
-    ],
-    [Balanced accuracy], [
-      Mean recall across both classes. It is preferred here because the labels
-      are imbalanced.
-    ],
-    [Macro-F1], [
-      F1 averaged equally across both classes, so the majority class does not
-      dominate the score.
-    ],
-  )
-  #set text(size: 11pt)
-
-  #pagebreak()
-
-  == Real-Data Supervised Baseline Candidates
-
-  #set text(size: 8.2pt)
-  #appendix-result-table(
-    [*Experiment*], [*Model*], [*Key setup*], [*Outcome*],
-
-    [Preprocessing], [
-      ResNet18, pretrained
-    ], [
-      Best overall supervised run. Sort, z-score, Gaussian, filter, resize.
-      Dilation filter, default radius, Gaussian high 100, 8 epochs.
-    ], [
-      BAcc 0.907.\ Macro-F1 0.903.
-    ],
-
-    [Preprocessing], [
-      ResNet18, pretrained
-    ], [
-      Best Gaussian-only reference. Sort, z-score, Gaussian, resize. No
-      filter. Gaussian mid 50, 8 epochs.
-    ], [
-      BAcc 0.904.\ Macro-F1 0.898.
-    ],
-
-    [Preprocessing], [
-      ResNet18, random init
-    ], [
-      Best random-init run. Sort, z-score, filter, resize. Opening filter,
-      low setting, no Gaussian, 8 epochs.
-    ], [
-      BAcc 0.875.\ Macro-F1 0.881.
-    ],
-
-    [Sup. augmentation], [
-      ResNet18, random init
-    ], [
-      Trial dropout with threshold tuning. Class-aware augmentation: 4 pattern
-      views and 1 no-pattern view.
-    ], [
-      BAcc 0.902.\ Macro-F1 0.880.
-    ],
-
-    [Sup. augmentation], [
-      ResNet18, random init
-    ], [
-      Standard cross-entropy baseline. No SSL, no pseudo-labels, no
-      augmentation, tuned threshold.
-    ], [
-      BAcc 0.551.\ Macro-F1 0.505.
-    ],
-  )
-  #set text(size: 11pt)
-
-  #pagebreak()
-
-  == Supervised Augmentation and Imbalance Handling
-
-  #set text(size: 8.2pt)
-  #appendix-result-table(
-    [*Experiment*], [*Model*], [*Key setup*], [*Outcome*],
-
-    [Augmentation], [
-      ResNet18, random init
-    ], [
-      Trial dropout, threshold-tuned, class-aware augmentation:
-      4 pattern views and 1 no-pattern view.
-    ], [
-      BAcc 0.902.\ Macro-F1 0.880.
-    ],
-
-    [Augmentation], [
-      ResNet18, random init
-    ], [
-      Pink-noise augmentation, threshold-tuned, class-aware augmentation:
-      4 pattern views and 1 no-pattern view.
-    ], [
-      BAcc 0.886.\ Macro-F1 0.877.
-    ],
-
-    [Augmentation], [
-      ResNet18, random init
-    ], [
-      Time jitter, threshold-tuned, class-aware augmentation:
-      4 pattern views and 1 no-pattern view.
-    ], [
-      BAcc 0.886.\ Macro-F1 0.882.
-    ],
-
-    [Augmentation], [
-      ResNet18, random init
-    ], [
-      Safe combination of ERP augmentations, threshold-tuned, class-aware:
-      4 pattern views and 1 no-pattern view.
-    ], [
-      BAcc 0.883.\ Macro-F1 0.867.
-    ],
-
-    [Imbalance], [
-      ResNet18, random init
-    ], [
-      Class-weighted cross-entropy, no augmentation, tuned threshold.
-    ], [
-      BAcc 0.516.\ Macro-F1 0.446.
-    ],
-
-    [Imbalance], [
-      ResNet18, random init
-    ], [
-      Focal loss, no augmentation, tuned threshold.
-    ], [
-      BAcc 0.538.\ Macro-F1 0.427.
-    ],
-
-    [Imbalance], [
-      ResNet18, random init
-    ], [
-      Balanced batches, no augmentation, tuned threshold.
-    ], [
-      BAcc 0.532.\ Macro-F1 0.475.
-    ],
-  )
-  #set text(size: 11pt)
-
-  #pagebreak()
-
-  == SSL and Semi-SSL Comparison
-
-  #set text(size: 8.2pt)
-  #appendix-result-table(
-    [*Experiment*], [*Model*], [*Key setup*], [*Outcome*],
-
-    [Semi-SSL + pseudo-labels], [
-      ResNet18, SSL fine-tune + student stage
-    ], [
-      SSL pool: same-dataset mod-4 pool. Same SSL stage as above, then
-      confidence-based pseudo-labelling with
-      threshold 0.9; about 823 pseudo-labels kept per fold.
-    ], [
-      BAcc 0.837.\ Macro-F1 0.849.
-    ],
-
-    [Semi-SSL], [
-      ResNet18, SSL fine-tune
-    ], [
-      SSL pool: same-dataset mod-4 pool. Simple Framework for Contrastive
-      Learning of Visual Representations (SimCLR) pretraining on the
-      larger same-dataset mod-4 pool, then
-      full fine-tuning on true labels.
-    ], [
-      BAcc 0.776.\ Macro-F1 0.788.
-    ],
-
-    [Self-supervised], [
-      ResNet18, SSL fine-tune
-    ], [
-      SSL pool: trainfold images. Simple Framework for Contrastive Learning of
-      Visual Representations (SimCLR) pretraining on the current
-      fold's training images, then
-      full fine-tuning on true labels.
-    ], [
-      BAcc 0.676.\ Macro-F1 0.697.
-    ],
-
-    [Linear probe], [
-      ResNet18, SSL linear probe
-    ], [
-      SSL pool: same-dataset mod-4 pool. SSL pretraining on the mod-4 pool,
-      frozen encoder, and a newly trained
-      classifier head only.
-    ], [
-      BAcc 0.505.\ Macro-F1 0.428.
-    ],
-
-    [SSL baseline], [
-      ResNet18, supervised
-    ], [
-      No SSL; no pseudo-labels; direct supervised training only.
-    ], [
-      BAcc 0.500.\ Macro-F1 0.377.
-    ],
-
-    [Linear probe], [
-      ResNet18, SSL linear probe
-    ], [
-      SSL pool: trainfold images. SSL pretraining, frozen encoder, and a
-      newly trained classifier head only.
-    ], [
-      BAcc 0.495.\ Macro-F1 0.388.
-    ],
-  )
-  #set text(size: 11pt)
-
-  == Behaviour on New Unlabelled ERP Candidates
-
-  #set text(size: 8.2pt)
-  #appendix-result-table(
-    [*Experiment*], [*Model*], [*Key setup*], [*Outcome*],
-
-    [Screening], [
-      ResNet18, supervised
-    ], [
-      Raw supervised baseline on the screened pool.
-    ], [
-      Pattern rate 0.000.\ Mean confidence 0.935.
-    ],
-
-    [Screening], [
-      ResNet18, SSL fine-tune
-    ], [
-      SSL source: trainfold images. No pseudo-labelling in the final stage.
-    ], [
-      Pattern rate 0.065.\ Mean confidence 0.934.
-    ],
-
-    [Screening], [
-      ResNet18, SSL fine-tune
-    ], [
-      SSL source: same-dataset mod-4 pool. No pseudo-labelling in the final
-      stage.
-    ], [
-      Pattern rate 0.043.\ Mean confidence 0.964.
-    ],
-
-    [Screening], [
-      ResNet18, SSL fine-tune + pseudo-labelling
-    ], [
-      Semi-SSL with the same-dataset mod-4 pool and a pseudo-label student
-      stage.
-    ], [
-      Pattern rate 0.069.\ Mean confidence 0.965.
-    ],
-  )
-  #set text(size: 11pt)
-]
+#let appendix = []
 
 // Put your abbreviations/acronyms here.
 // 'key' is what you will reference in the typst code
@@ -383,11 +84,6 @@
     key: "macro-f1",
     short: "Macro-F1",
     long: "Macro-averaged F1 score",
-  ),
-  (
-    key: "mmd",
-    short: "MMD",
-    long: "Maximum mean discrepancy",
   ),
   (
     key: "mri",
@@ -603,8 +299,8 @@
     ]
   ],
   caption: [
-    Manual decision tree for ERP image patterns. TODO more explanation
-  ],
+    Manual decision tree for ERP image patterns. It first separates images without a connected pattern from candidate patterns, then distinguishes time-drifting structures from vertical or widening structures before assigning one of the six pattern labels.
+   ],
 )
 
 // ============================================================================
@@ -660,17 +356,21 @@ This thesis investigates whether visual ERP-image patterns can be detected autom
 
   + *Sim-to-real transfer* How accurately and efficiently can a CNN model trained on simulated ERP images detect and distinguish relevant spatio-temporal patterns in real-world ERP images?
 
-    + *Sim-to-real sigmoid* Can a CNN trained on simulated sigmoid ERP images recognise sigmoid patterns in manually labelled real ERP images?
+    + *Sim-to-real sigmoid* <rq:sim-to-real-sigmoid> Can a CNN trained on
+      simulated sigmoid ERP images recognise sigmoid patterns in manually
+      labelled real ERP images?
 
-    + *Simulator calibration* How does simulator calibration affect sim-to-real transfer and what performance gap remains compared with training on real labelled ERP images?
+    + *Simulator calibration* <rq:simulator-calibration> How does simulator
+      calibration affect sim-to-real transfer and what performance gap remains
+      compared with training on real labelled ERP images?
   
   + *Manual labeling* How accurately and efficiently can CNNs detect visual ERP-image patterns when they are trained on manually labelled real ERP images?
 
-    + *Preprocessing* Which training and preprocessing choices improve CNN-based classification of manually labelled ERP images?
+    + *Preprocessing* <rq:real-preprocessing> Which training and preprocessing choices improve CNN-based classification of manually labelled ERP images?
 
-    + *Augmentation and class imbalance* Do ERP-specific augmentations or imbalance-handling strategies improve CNN model performance?
+    + *Augmentation and class imbalance* <rq:real-augmentation> Do ERP-specific augmentations or imbalance-handling strategies improve CNN model performance?
 
-    + *Model choice and training strategy* Which model architecture and training regime provide the best accuracy-efficiency trade-off for manually labelled real ERP-image classification?
+    + *Model choice and training strategy* <rq:real-model-choice> Which model architecture and training regime provide the best accuracy-efficiency trade-off for manually labelled real ERP-image classification?
 
 ]
 
@@ -801,23 +501,7 @@ matrix form. The goal is to create ERP images that resemble real fixation ERP
 images in their basic dimensions and preprocessing output, rather than arbitrary
 simulator examples.
 
-This setup leads directly to RQ 1.1. A CNN can only be useful here if the
-simulated sigmoid/no-class distinction corresponds to the same visual
-distinction in manually labelled real ERP images. High performance on simulated
-images alone would only show that the generator creates a learnable synthetic
-task. It would not show that the learned decision rule captures the intended
-real ERP-image morphology.
-
-The sim-to-real experiment therefore treats simulation as a proposed substitute
-for part of the manual labelling effort. The model first learns from simulated
-examples whose labels are known by construction, and is then evaluated on
-manually labelled real ERP images. This makes the experiment a transfer test:
-if the simulated images are close enough to the real sigmoid morphology, the
-model should recognise the real pattern without being trained on real labels.
-If the model instead relies on simulator-specific regularities, the transfer
-performance will reveal that gap. This single-dataset comparison cannot prove
-general transfer, but it establishes whether the simulation is close enough to a
-real target to justify broader tests.
+This setup leads directly to #link(<rq:sim-to-real-sigmoid>)[RQ 1.1]. The aim of simulation is to approximate real ERP images well enough that a CNN trained on simulated images can recognise the same visual pattern in real data. In the long term, such a model should not be limited to one dataset. As a first feasibility test, this thesis therefore compares the simulated sigmoid/no-class task with one manually labelled real fixation dataset.
 
 === Simulated Class Definition
 A six-class simulation setup was considered at first, but handling all visual patterns was infeasible. In the current simulation design, each simulated ERP image contains all previously mentioned components, so a single image can contain traces of several other classes. The origin of that decision is that the visual patterns are sensitive to small parameter changes. A slight change in timing, amplitude, or noise can move, deform, or remove a pattern, or produce a shape that no longer matches its usual visual description. Therefore, the final experiments use sigmoid as the only positive ERP-image pattern. It was the most robust against parameter changes of the six simulated morphologies and also the most frequent pattern in the available labelled fixation data.
@@ -825,7 +509,7 @@ A six-class simulation setup was considered at first, but handling all visual pa
 This design choice is important because the class is not encoded by a separate image generator for each pattern. Instead, the same simulated ERP activity can be made to reveal different structures through sorting. The no-class label follows the same logic. It is not an empty or all-noise image. It is an ERP image created from the same simulated activity, but with a random trial order, so that the systematic relation between trials and time is removed.
 
 === Parameter Search
-The parameter search aims to find simulator settings that make a CNN trained on synthetic images perform as well as possible on the labelled fixation dataset. For this purpose, this thesis applies and compares broad randomisation, Latin hypercube sampling, heterogeneity scaling, Monte Carlo random search, a two-zone mixture strategy, and feature-distance scoring @Tobin2017, @McKay1979, @Bergstra2012, @Gretton2012. The next section describes these search and scoring strategies in more detail.
+The parameter search aims to find simulator settings that make a CNN trained on synthetic images perform as well as possible on the labelled fixation dataset. For this purpose, this thesis applies and compares broad randomisation, Latin hypercube sampling, heterogeneity scaling, Monte Carlo random search, and a two-zone mixture strategy @Tobin2017, @McKay1979, @Bergstra2012. The next section describes these search and scoring strategies in more detail.
 
 UnfoldSim is well suited for this purpose because it simulates continuous event-based time series for EEG and event-related signals, rather than only isolated averaged waveforms @Schepers2025.
 
@@ -833,6 +517,8 @@ UnfoldSim is well suited for this purpose because it simulates continuous event-
 The central challenge is the sim-to-real gap. Strong synthetic performance does not guarantee real-data performance, because the model may learn properties that are specific to the simulator. Domain randomisation addresses this risk by varying simulator parameters so that the real world appears as one possible variant within the window of the synthetic distribution @Tobin2017. In this thesis, the same principle applies. If parameters such as component widths, latency gaps, amplitudes, basis shapes, or noise levels are varied too aggressively, the target pattern itself becomes implausible or disappears.
 
 === Search and Scoring Strategies
+This parameter search addresses #link(<rq:simulator-calibration>)[RQ 1.2]. It tests whether better simulator calibration can improve sim-to-real transfer, and whether a remaining gap to real-label training persists.
+
 The goal is therefore to increase variation while remaining close enough to the real sigmoid morphology. The exposed search space contains 24 parameter specifications. Because each specification has a mean and a standard deviation, the calibration problem becomes 48-dimensional. Five search strategies and one simulator-first scoring proxy were explored.
 
 Broad random search, or domain randomisation, samples the parameter space as a random exploration baseline, with each parameter given the same weight.
@@ -844,8 +530,6 @@ As a naive parameter-search attempt, a heterogeneity experiment scaled the stand
 Monte Carlo random search provides a simple comparison by uniformly sampling one parameter at a time, and remains defensible because random search is a strong baseline for high-dimensional hyperparameter spaces @Bergstra2012.
 
 The two-zone mixture uses 70% of the best parameters from the LHS baseline and 30% edge-case configurations.
-
-Feature-distance scoring is a simulator-first proxy for judging simulator settings before full model training. It compares real and simulated sigmoid images with hand-designed image features and combines feature differences with an RBF-MMD distribution distance @Gretton2012. The resulting candidates are then compared through model-first ranking by real-data balanced accuracy.
 
 == Related Work and Positioning
 The closest related work starts with single-trial ERP analysis. Grand averages remain useful summaries, but they can hide latency jitter, response subtypes, and systematic links between EEG and behaviour. ERP images and related single-trial methods address this by keeping trial-wise structure visible instead of reducing it to one waveform @Jung2001, @Pernet2011SingleTrialWhyBother, @Ouyang2017LatencyVariabilityReview. This thesis uses the same idea, but turns the visual inspection step into a classification problem.
@@ -973,7 +657,12 @@ The labelled real-data pool consists of the sources in @tab:real-data-sources. F
 
 ]
 
-TODO add process, first overview, then sort by model confidence, select few samples to test if suitable for thesis, select 200 more and test what sorting variables can potentially create patterns. Keep sorting variables that contained at least one pattern and label all available channels from each of them.
+
+Manual labelling is the limiting step, so the annotation workflow avoids labelling every possible combination of dataset, participant, event, channel, and sort variable. It works from a coarse screening step towards more detailed labelling and keeps only sources that satisfy the preprocessing requirements mentioned earlier.
+
+The workflow starts by letting the classifier propose ten candidate images for each dataset. These images receive manual labels to test whether the generated ERP images satisfy the preprocessing and quality requirements for this thesis. For sources that pass this check, the workflow ranks the available images by the model probability of containing a pattern and selects 200 images across the available events and sort variables from the top of this ranking. These images also receive manual labels.
+
+The third step expands only the promising sort variables. If the 200-image screen finds at least one pattern for a dataset and sort variable, the workflow labels all available channels for that combination. The reference fixation dataset and some other sources contain only one participant, while other sources contain several participants. When several participants are available, the workflow still uses one participant per dataset so that the labelled pool covers more different sources and experiments. This also increases the chance of finding different pattern types, instead of adding many potential similar images from the same experiment.
 
 #pattern-decision-tree <fig:pattern-decision-tree>
 
@@ -984,14 +673,20 @@ The preprocessing comparison covers several parts of the image pipeline. It comp
 
 Trial sorting and z-scoring remain fixed because they define a usable ERP-image input for this task. Sorting makes cross-trial ERP-image patterns visible. Per-time-point z-scoring reduces vertical amplitude-dominated bands, which often occur when many trials show a strong response at the same time, mostly early after stimulus onset. These bands are not the main morphology of interest in this thesis. Z-scoring therefore emphasises relative differences between trials.
 
-TODO create research questions for preprocessing steps, for each.
+TODO chose zscore after sort to remove the common verticals bands out of the image as early as possible. smoothing could wash out these bands therefore make z-scoring less effective in removing them. for simulation and real data.
 
 The best model performance was achieved with a preprocessing pipeline that sorts trials, applies per-time-point z-scoring, applies Gaussian smoothing, and resizes the image matrix.
 
-todo results
 
 This thesis applies the same empirical selection logic to the broader training pipeline. Some steps stay fixed for comparability, some depend on dataset properties, and others require experimental comparison. This follows the general lesson from nnU-Net @Isensee2021nnUNet. In this thesis, the compared training choices include the image pipeline, class balancing, augmentation, model training, filtering, denoising, contrast adjustment, and resizing. These comparisons help to choose preprocessing and training settings that improve model performance on normalised input data without artificially inflating scores through overfitting.
 
+== Real-to-Real Data Augmentation
+todo explain the mod split and so on 
+also mentaion what not worked for augmentation
+
+#link(<rq:real-preprocessing>)[RQ 2.1]
+#link(<rq:real-augmentation>)[RQ 2.2]
+#link(<rq:real-model-choice>)[RQ 2.3]
 
 == Calibration, Models, and Training
 The classifier comparison uses binary CNN baselines with one, three, and ten convolutional layers, together with a pretrained ResNet18 model @He2016ResNet. ResNet is useful here because residual connections make a deeper image classifier easier to optimise, while still providing a standard computer-vision baseline for comparison. Having the best practices already implemented, rather than figuring them out from scratch, makes it easier to focus on the classification and preprocessing of the ERP images.
@@ -1000,6 +695,8 @@ Data augmentation improves model robustness when labelled training data are limi
 
 == Evaluation Protocol
 The evaluation combines accuracy, balanced accuracy, macro F1, precision, recall, and timing summaries under grouped five-fold cross-validation. These metrics are used together because a single score would not capture overall performance, class imbalance, different error types, and computational cost.
+
+All simulations, model training, and evaluation runs in this thesis were executed on a single PC with an AMD Ryzen 7 7800X3D 8-core CPU, 64 GB of system memory, and an NVIDIA GeForce RTX 4070 GPU with 12 GB of VRAM running Linux.
 
 
 
@@ -1012,17 +709,304 @@ The evaluation combines accuracy, balanced accuracy, macro F1, precision, recall
 = Results <chp:results>
 
 == Data Simulation and Calibration Results
-TABLE to do
-per model, per explored adjustment
-classification on simulated data is perfect, on real data lags behind the real approach.
+This section reports three simulation experiments. The first experiment tunes the simulator parameters and evaluates the resulting model on real-data labels. The second experiment measures the gap between synthetic validation and real-data evaluation. The third experiment keeps the simulator fixed and compares downstream classifiers on the same real labels.
 
+@tab:simulation-parameter-search-results compares three sampling strategies (broad random, Latin hypercube, Monte Carlo) against the starting parameters. Every strategy proposes twelve different parameter combinations. For each combination the simulator generates 1,000 images per pattern, a model is trained on those images, and then validated on real labels. This run is repeated three times per combination. The reported BAcc and macro-F1 are the means across these three runs. The chosen model in this case is a dense neural network. The same setup was also run with smaller image sizes of 8x8, 4x4, and 2x2. None of the models trained on the smaller sizes reached the performance of the best 16x16 run.
+
+The dense network is the chosen downstream classifier because at this resolution the input is small enough that convolutional layers are not needed. A deeper network such as ResNet18 would downsample a 16x16 input below useful spatial sizes after only a few of its conversion stages.
+
+// Sources:
+// - notebooks/week_15/dense_nn_lowpass_direct_search.ipynb
+// - notebooks/week_15/simulation_small_sclae.ipynb
+// - /home/benjamin/Dokumente/presentations/pdfs/midterm_talk_v3-1776681517355.pdf, pages 15, 22
+#[
+  #show figure: set block(breakable: false)
+  #set text(size: 8pt)
+  #set par(justify: false)
+
+  #figure(
+    table(
+      columns: (2.4fr, 0.7fr, 0.85fr, 0.95fr),
+      inset: (x: 4pt, y: 3pt),
+      stroke: (x: none, y: 0.45pt + luma(190)),
+      fill: (_, y) => if y == 0 { rgb("#f3f5f7") },
+      align: (x, y) => {
+        if y == 0 {
+          center + horizon
+        } else if x > 0 {
+          center + top
+        } else {
+          left + top
+        }
+      },
+      table.header(
+        [Search method],
+        [Resolution],
+        [BAcc],
+        [Macro-F1],
+      ),
+
+      [Starting parameters],
+      [16x16],
+      [0.674],
+      [0.601],
+
+      [Broad random search],
+      [16x16],
+      [0.692],
+      [0.657],
+
+      [Monte Carlo random search],
+      [16x16],
+      [0.711],
+      [0.636],
+
+      [Latin hypercube search],
+      [16x16],
+      [0.711],
+      [0.659],
+
+      [Latin hypercube search],
+      [8x8],
+      [0.665],
+      [0.517],
+
+      [Latin hypercube search],
+      [4x4],
+      [0.638],
+      [0.425],
+
+      [Broad random search],
+      [2x2],
+      [0.612],
+      [0.407],
+    ),
+    caption: [Best Dense-NN run per search method and resolution from 72 screening combinations. With smoothing deactivaded for the simulated and real ERP images, the best 16x16 dense-network row drops to BAcc 0.42.],
+  ) <tab:simulation-parameter-search-results>
+]
+
+Two further search strategies described in the methods chapter do not contribute a separate row to @tab:simulation-parameter-search-results. As part of the heterogeneity-scaling family, a simpler variant that only increaseed the standard deviations of the normally distributed parameters was discarded after visual inspection. The resulting ERP images and their visible patterns differed strongly from the real labelled images, so this variant was not investigated further. 
+
+The two-zone mixture was also tested in an early prototype together with all of the other parameter-finding strategies. Within this run, the preprocessing pipeline was probed in two ways. Z-scoring was applied after downscaling instead of before, and a smoothing kernel was altered. With these two adjustments in place, every evaluated strategy, including the two-zone mixture itself, collapsed to a balanced accuracy of 0.5 or lower under that training configuration. The failure is therefore not specific to the two-zone mixture. The result matches the prior observation in the methods discussion that minor pipeline adjustments can produce large changes in classification outcomes, and this thesis confirms that observation empirically.
+
+The same Latin-hypercube-calibrated dense network at 16x16 with low-pass smoothing reaches a perfect score on its own simulated training set (@tab:simulation-calibration-results). The perfect score on the training set only confirms that the network overfits the data it was trained on. A perfect training score combined with a much lower score on real labels is consistent with the dense network overfitting to features of the simulated images that do not transfer to real ERP images. This near-perfect training-set fit was observed frequently across the evaluated setups and was therefore not pursued further as a separate result.
+
+#[
+  #show figure: set block(breakable: false)
+  #set text(size: 8pt)
+  #set par(justify: false)
+
+  #figure(
+    table(
+      columns: (2.8fr, 0.9fr, 1fr),
+      inset: (x: 4pt, y: 3pt),
+      stroke: (x: none, y: 0.45pt + luma(190)),
+      fill: (_, y) => if y == 0 { rgb("#f3f5f7") },
+      align: (x, y) => {
+        if y == 0 {
+          center + horizon
+        } else if x > 0 {
+          center + top
+        } else {
+          left + top
+        }
+      },
+      table.header(
+        [Evaluation set],
+        [BAcc],
+        [Macro-F1],
+      ),
+
+      [Simulated training set],
+      [1.000],
+      [1.000],
+
+      [Real labelled fixation data],
+      [0.711],
+      [0.659],
+    ),
+    caption: [Training-set fit versus real-data score for the calibrated Latin hypercube candidate. Dense neural network, 16x16, low-pass smoothing, three evaluation repetitions. The across-repetition standard deviation of BAcc on the real labelled data is 0.050.],
+  ) <tab:simulation-calibration-results>
+]
+
+This (near) perfect training-set fit was observed frequently across the evaluated sim-to-sim setups and was therefore not pursued further for investigation.
+
+The simulator-first ranking complements the direct search by grid-searching the simulator-trained classifier across three downstream models (dense neural network, random forest, support-vector machine with radial basis kernel), three sampling strategies (broad random, Latin hypercube, Monte Carlo), and four input resolutions (2x2, 4x4, 8x8, 16x16). @tab:simulation-model-comparison-results shows the three top rows of that ranking, all at 16x16 under Monte Carlo random search.
+
+#[
+  #show figure: set block(breakable: false)
+  #set text(size: 8pt)
+  #set par(justify: false)
+
+  #figure(
+    table(
+      columns: (3fr, 0.85fr, 0.95fr),
+      inset: (x: 4pt, y: 3pt),
+      stroke: (x: none, y: 0.45pt + luma(190)),
+      fill: (_, y) => if y == 0 { rgb("#f3f5f7") },
+      align: (x, y) => {
+        if y == 0 {
+          center + horizon
+        } else if x > 0 {
+          center + top
+        } else {
+          left + top
+        }
+      },
+      table.header(
+        [Downstream model],
+        [BAcc],
+        [Macro-F1],
+      ),
+
+      [Dense neural network],
+      [0.684],
+      [0.542],
+
+      [Random forest],
+      [0.642],
+      [0.502],
+
+      [Support-vector machine with radial basis kernel],
+      [0.641],
+      [0.500],
+    ),
+    caption: [Top three downstream models from the simulator-first ranking. All rows use Monte Carlo random search, 16x16 input resolution, and low-pass smoothing.],
+  ) <tab:simulation-model-comparison-results>
+]
+
+The dense neural network is the strongest of the three downstream models. The downscale serves two ends: it shortens training time and it locates the lower bound below which further reduction removes too much of the visual pattern itself, which the analysis aims to preserve rather than aggregate away as other methods do.
+
+
+
+
+TODO add results from 64x64 resnet 18 model.
 == Classification Performance on Real Data
-TABLE
-for each model and the tested settings
+The supervised real-data experiments use the manually labelled ERP-image pool. The class apperience is imbalanced, so balanced accuracy and macro-F1 remain the main comparison metrics.
 
-== Cross-Dataset Generalisation
-TODO MORE DATA
-work in progress
+// Sources:
+// - notebooks/week_21/outputs/week21_labeling_summary/summary.json
+// - notebooks/week_23/outputs/augmentation_inverse_sort_polarity/run_config.json
+#[
+  #show figure: set block(breakable: true)
+  #set text(size: 8pt)
+  #set par(justify: false)
+
+  #figure(
+    table(
+      columns: (1.7fr, 0.75fr, 3.4fr),
+      inset: (x: 4pt, y: 3pt),
+      stroke: (x: none, y: 0.45pt + luma(190)),
+      fill: (_, y) => if y == 0 { rgb("#f3f5f7") },
+      align: (x, y) => if y == 0 { center + horizon } else if x == 1 { center + top } else { left + top },
+      table.header(
+        [Quantity],
+        [Value],
+        [Meaning],
+      ),
+
+      [Classified annotations],
+      [2,879],
+      [Manually classified ERP images],
+
+      [Pattern labels],
+      [294],
+      [Positive binary class],
+
+      [Datasets with patterns],
+      [10],
+      [Sources with at least one positive pattern label found],
+    ),
+    caption: [Additional metrics about the manual label pool.],
+  ) <tab:manual-label-pool-results>
+]
+
+
+TODO should the 1, 3, 10 CNN layer models also be mentioned. they underperformed under resnet18 and there is no gain in using resnet 34
+
+// Sources:
+// - notebooks/week_21/outputs/resnet18_labeled_erp_cv/metrics_summary.csv
+// - notebooks/week_21/outputs/resnet34_labeled_erp_cv_128_resize/metrics_summary.csv
+// - notebooks/week_23/outputs/augmentation_inverse_sort_polarity/metrics_summary.csv
+// - notebooks/week_18/preprocessing_test.ipynb
+// - notebooks/week_18/outputs/data_augmentation_tests_ranked_summary.csv
+// - notebooks/week_18/outputs/semi_supervised_learing2_summary.csv
+// - /home/benjamin/Dokumente/presentations/pdfs/week_22.pdf, page 5
+// - /home/benjamin/Dokumente/presentations/pdfs/week_23.pdf, page 2
+#[
+  #show figure: set block(breakable: false)
+  #set text(size: 8pt)
+  #set par(justify: false)
+
+  #figure(
+    table(
+      columns: (1.35fr, 1.25fr, 1.35fr, 2.45fr, 0.65fr, 0.75fr),
+      inset: (x: 4pt, y: 3pt),
+      stroke: (x: none, y: 0.45pt + luma(190)),
+      fill: (_, y) => if y == 0 { rgb("#f3f5f7") },
+      align: (x, y) => {
+        if y == 0 {
+          center + horizon
+        } else if x == 4 or x == 5 {
+          center + top
+        } else {
+          left + top
+        }
+      },
+      table.header(
+        [Experiment],
+        [Model],
+        [Training data],
+        [Changed variables],
+        [BAcc],
+        [Macro-F1],
+      ),
+
+      [Inverse sort and polarity augmentation],
+      [ResNet18 pretrained],
+      [12 labelled data sources with augmentation],
+      [Trial sort direction, signal polarity, binary pattern task],
+      [0.918],
+      [0.917],
+
+      [Preprocessing sweep],
+      [ResNet18 pretrained],
+      [fixations dataset only],
+      [Gaussian smoothing, Dilation filter, high 100 smoothing],
+      [0.907],
+      [0.903],
+
+      [Trial-dropout augmentation],
+      [ResNet18 random initialisation],
+      [fixations dataset only],
+      [Trial dropout, threshold tuning, class-aware augmentation],
+      [0.902],
+      [0.880],
+
+      [Labelled ResNet18 baseline],
+      [ResNet18 pretrained],
+      [12 labelled data sources],
+      [No inverse sort or polarity augmentation, binary pattern task],
+      [0.866],
+      [0.866],
+
+      [Labelled ResNet34 comparison],
+      [ResNet34 pretrained],
+      [12 labelled data sources],
+      [Backbone depth, resize to 128, binary pattern task],
+      [0.854],
+      [0.854],
+
+      [Pseudo-label semi-supervised training],
+      [ResNet18 SSL fine-tune and student stage],
+      [fixations dataset with same-dataset Mod-4 SSL pool],
+      [SSL fine-tuning, confidence threshold 0.9 pseudo-labels],
+      [0.837],
+      [0.849],
+    ),
+    caption: [Real-data classification results by training data, model, and changed training variables.],
+  ) <tab:real-data-classification-results>
+]
 
 
 // ----------------------------------------------------------------------------

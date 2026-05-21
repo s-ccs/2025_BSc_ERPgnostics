@@ -1,0 +1,117 @@
+Appendix tables — archived from report/thesis/thesis.typ
+Archived on 2026-05-21. These tables were previously rendered in the
+thesis appendix and have been removed from thesis.typ. Restore by copying
+the relevant section back into the #let appendix = [...] block.
+
+============================================================
+1. Short Definitions of the Main Experimental Terms
+============================================================
+
+Term                              | Meaning in this thesis
+----------------------------------+----------------------------------------------------------------
+Supervised learning               | Train the classifier only on real labelled ERP images. No
+                                  | pseudo-labels are added.
+Self-supervised learning (SSL)    | Pretrain the encoder without class labels. In this project
+                                  | that stage is contrastive learning following the Simple
+                                  | Framework for Contrastive Learning of Visual Representations
+                                  | (SimCLR) on ERP images.
+Linear probe                      | Freeze the SSL encoder and train only a new classifier head
+                                  | on labelled ERP images.
+Fine-tuning                       | Update the full pretrained model on labelled ERP images so the
+                                  | learned representation adapts to the task.
+Semi-self-supervised learning     | Use SSL first, then extend later training with pseudo-labelled
+                                  | examples from an unlabelled pool.
+Pseudo-labelling                  | Predict labels for unlabelled ERP images and keep only the
+                                  | high-confidence predictions as temporary training labels.
+Trainfold images                  | Use only ERP images from the current training folds as SSL
+                                  | input. The validation fold stays unseen.
+Same-dataset mod-4 pool           | A larger unlabelled ERP-image pool from the same fixation
+                                  | dataset, generated with the same mod-4 policy.
+Mod-4 split                       | Split the sorted trials into four modulo parts. In week 18,
+                                  | pattern contributes 4 parts and no pattern contributes 1 part.
+Grouped 5-fold cross-validation   | Samples from the same original ERP source stay in the same
+                                  | fold to avoid train/validation leakage.
+Balanced accuracy                 | Mean recall across both classes. It is preferred here because
+                                  | the labels are imbalanced.
+Macro-F1                          | F1 averaged equally across both classes, so the majority class
+                                  | does not dominate the score.
+
+
+============================================================
+2. Real-Data Supervised Baseline Candidates
+============================================================
+
+Experiment        | Model                      | Key setup                                                            | Outcome
+------------------+----------------------------+----------------------------------------------------------------------+----------------------
+Preprocessing     | ResNet18, pretrained       | Best overall supervised run. Sort, z-score, Gaussian, filter,        | BAcc 0.907
+                  |                            | resize. Dilation filter, default radius, Gaussian high 100, 8        | Macro-F1 0.903
+                  |                            | epochs.                                                              |
+Preprocessing     | ResNet18, pretrained       | Best Gaussian-only reference. Sort, z-score, Gaussian, resize.       | BAcc 0.904
+                  |                            | No filter. Gaussian mid 50, 8 epochs.                                | Macro-F1 0.898
+Preprocessing     | ResNet18, random init      | Best random-init run. Sort, z-score, filter, resize. Opening         | BAcc 0.875
+                  |                            | filter, low setting, no Gaussian, 8 epochs.                          | Macro-F1 0.881
+Sup. augmentation | ResNet18, random init      | Trial dropout with threshold tuning. Class-aware augmentation:       | BAcc 0.902
+                  |                            | 4 pattern views and 1 no-pattern view.                               | Macro-F1 0.880
+Sup. augmentation | ResNet18, random init      | Standard cross-entropy baseline. No SSL, no pseudo-labels, no        | BAcc 0.551
+                  |                            | augmentation, tuned threshold.                                       | Macro-F1 0.505
+
+
+============================================================
+3. Supervised Augmentation and Imbalance Handling
+============================================================
+
+Experiment   | Model                  | Key setup                                                       | Outcome
+-------------+------------------------+-----------------------------------------------------------------+----------------------
+Augmentation | ResNet18, random init  | Trial dropout, threshold-tuned, class-aware augmentation:       | BAcc 0.902
+             |                        | 4 pattern views and 1 no-pattern view.                          | Macro-F1 0.880
+Augmentation | ResNet18, random init  | Pink-noise augmentation, threshold-tuned, class-aware           | BAcc 0.886
+             |                        | augmentation: 4 pattern views and 1 no-pattern view.            | Macro-F1 0.877
+Augmentation | ResNet18, random init  | Time jitter, threshold-tuned, class-aware augmentation:         | BAcc 0.886
+             |                        | 4 pattern views and 1 no-pattern view.                          | Macro-F1 0.882
+Augmentation | ResNet18, random init  | Safe combination of ERP augmentations, threshold-tuned,         | BAcc 0.883
+             |                        | class-aware: 4 pattern views and 1 no-pattern view.             | Macro-F1 0.867
+Imbalance    | ResNet18, random init  | Class-weighted cross-entropy, no augmentation, tuned threshold. | BAcc 0.516
+             |                        |                                                                 | Macro-F1 0.446
+Imbalance    | ResNet18, random init  | Focal loss, no augmentation, tuned threshold.                   | BAcc 0.538
+             |                        |                                                                 | Macro-F1 0.427
+Imbalance    | ResNet18, random init  | Balanced batches, no augmentation, tuned threshold.             | BAcc 0.532
+             |                        |                                                                 | Macro-F1 0.475
+
+
+============================================================
+4. SSL and Semi-SSL Comparison
+============================================================
+
+Experiment                | Model                                       | Key setup                                                      | Outcome
+--------------------------+---------------------------------------------+----------------------------------------------------------------+----------------------
+Semi-SSL + pseudo-labels  | ResNet18, SSL fine-tune + student stage     | SSL pool: same-dataset mod-4 pool. Same SSL stage as above,    | BAcc 0.837
+                          |                                             | then confidence-based pseudo-labelling with threshold 0.9;     | Macro-F1 0.849
+                          |                                             | about 823 pseudo-labels kept per fold.                         |
+Semi-SSL                  | ResNet18, SSL fine-tune                     | SSL pool: same-dataset mod-4 pool. SimCLR pretraining on the   | BAcc 0.776
+                          |                                             | larger same-dataset mod-4 pool, then full fine-tuning on true  | Macro-F1 0.788
+                          |                                             | labels.                                                        |
+Self-supervised           | ResNet18, SSL fine-tune                     | SSL pool: trainfold images. SimCLR pretraining on the current  | BAcc 0.676
+                          |                                             | fold's training images, then full fine-tuning on true labels.  | Macro-F1 0.697
+Linear probe              | ResNet18, SSL linear probe                  | SSL pool: same-dataset mod-4 pool. SSL pretraining on the      | BAcc 0.505
+                          |                                             | mod-4 pool, frozen encoder, and a newly trained classifier     | Macro-F1 0.428
+                          |                                             | head only.                                                     |
+SSL baseline              | ResNet18, supervised                        | No SSL; no pseudo-labels; direct supervised training only.     | BAcc 0.500
+                          |                                             |                                                                | Macro-F1 0.377
+Linear probe              | ResNet18, SSL linear probe                  | SSL pool: trainfold images. SSL pretraining, frozen encoder,   | BAcc 0.495
+                          |                                             | and a newly trained classifier head only.                      | Macro-F1 0.388
+
+
+============================================================
+5. Behaviour on New Unlabelled ERP Candidates
+============================================================
+
+Experiment | Model                                       | Key setup                                                          | Outcome
+-----------+---------------------------------------------+--------------------------------------------------------------------+--------------------------
+Screening  | ResNet18, supervised                        | Raw supervised baseline on the screened pool.                      | Pattern rate 0.000
+           |                                             |                                                                    | Mean confidence 0.935
+Screening  | ResNet18, SSL fine-tune                     | SSL source: trainfold images. No pseudo-labelling in the final     | Pattern rate 0.065
+           |                                             | stage.                                                             | Mean confidence 0.934
+Screening  | ResNet18, SSL fine-tune                     | SSL source: same-dataset mod-4 pool. No pseudo-labelling in the    | Pattern rate 0.043
+           |                                             | final stage.                                                       | Mean confidence 0.964
+Screening  | ResNet18, SSL fine-tune + pseudo-labelling  | Semi-SSL with the same-dataset mod-4 pool and a pseudo-label       | Pattern rate 0.069
+           |                                             | student stage.                                                     | Mean confidence 0.965
