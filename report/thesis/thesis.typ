@@ -41,7 +41,14 @@
 )
 
 // if you have appendices, add them here
-#let appendix = []
+#let appendix = [
+  = Appendices
+
+  == Use of AI Tools
+
+  I used AI-based tools as support tools during this thesis: OpenAI ChatGPT, Codex, and Anthropic Claude Code @OpenAICodex2026, @AnthropicClaudeIntro2026. These tools supported code development, debugging, and language revision. I did not use AI tools as independent scientific sources. I reviewed all AI-assisted input and output and remain responsible for the submitted thesis.
+
+]
 
 // Put your abbreviations/acronyms here.
 // 'key' is what you will reference in the typst code
@@ -66,6 +73,11 @@
     long: "Convolutional neural network",
   ),
   (
+    key: "cpu",
+    short: "CPU",
+    long: "Central processing unit",
+  ),
+  (
     key: "eeg",
     short: "EEG",
     long: "Electroencephalography",
@@ -74,6 +86,11 @@
     key: "erp",
     short: "ERP",
     long: "Event-related potential",
+  ),
+  (
+    key: "gpu",
+    short: "GPU",
+    long: "Graphics processing unit",
   ),
   (
     key: "lhs",
@@ -693,6 +710,8 @@ The classifier comparison uses binary CNN baselines with one, three, and ten con
 
 Data augmentation improves model robustness when labelled training data are limited. This thesis uses augmentation to increase the variation of the labelled ERP-image training set and to reduce memorisation of individual examples. Brain-RetinaNet provides a domain-distant but useful reference point for this small-data setting. Iqbal et al. apply targeted augmentation to a small labelled MRI detection dataset and report improvements across several detector backbones @Iqbal2026BrainRetinaNet. The analogy only concerns the limited-data setting, but it motivates the evaluation of class-aware ERP-image augmentation and class balancing as central training decisions.
 
+TODO explain modsplit, its necessary different numberf of trials, input nomalsiation
+
 == Evaluation Protocol
 The evaluation combines accuracy, balanced accuracy, macro F1, precision, recall, and timing summaries under grouped five-fold cross-validation. These metrics are used together because a single score would not capture overall performance, class imbalance, different error types, and computational cost.
 
@@ -709,9 +728,9 @@ All simulations, model training, and evaluation runs in this thesis were execute
 = Results <chp:results>
 
 == Data Simulation and Calibration Results
-This section reports three simulation experiments. The first experiment tunes the simulator parameters and evaluates the resulting model on real-data labels. The second experiment measures the gap between synthetic validation and real-data evaluation. The third experiment keeps the simulator fixed and compares downstream classifiers on the same real labels.
+This section reports the simulation experiments. The first experiment tunes the simulator parameters and evaluates the resulting model on real-data labels. The second experiment measures the gap between synthetic validation and real-data evaluation. The third experiment keeps the simulator fixed and compares downstream classifiers on the same real labels. A final follow-up repeats the parameter search with a pretrained ResNet18 classifier.
 
-@tab:simulation-parameter-search-results compares three sampling strategies (broad random, Latin hypercube, Monte Carlo) against the starting parameters. Every strategy proposes twelve different parameter combinations. For each combination the simulator generates 1,000 images per pattern, a model is trained on those images, and then validated on real labels. This run is repeated three times per combination. The reported BAcc and macro-F1 are the means across these three runs. The chosen model in this case is a dense neural network. The same setup was also run with smaller image sizes of 8x8, 4x4, and 2x2. None of the models trained on the smaller sizes reached the performance of the best 16x16 run.
+@tab:simulation-parameter-search-results compares three sampling strategies (broad random, Latin hypercube, Monte Carlo) against the starting parameters. A parameter combination is one complete assignment for all of these settings at once. Every strategy proposes twelve such full combinations, where each combination differs from the starting parameters in many values at once. For each combination the simulator generates 1,000 images per pattern, a model is trained on those images for a fixed budget of 30 epochs without early stopping, and then validated on real labels. This run is repeated three times per combination to average out random effects from the simulator draws and from the network initialisation, so that a single lucky or unlucky run does not decide the reported score. The reported BAcc and macro-F1 are the means across these three runs. The chosen model in this case is a dense neural network. The same setup was also run with smaller image sizes of 8x8, 4x4, and 2x2. None of the models trained on the smaller sizes reached the performance of the best 16x16 run.
 
 The dense network is the chosen downstream classifier because at this resolution the input is small enough that convolutional layers are not needed. A deeper network such as ResNet18 would downsample a 16x16 input below useful spatial sizes after only a few of its conversion stages.
 
@@ -880,9 +899,113 @@ The dense neural network is the strongest of the three downstream models. The do
 
 
 
-TODO add results from 64x64 resnet 18 model.
+The 64x64 ERP image size and ResNet18 model follow-up tests whether the same simulator can train the higher-capacity classifier used in the real-data experiments. Every parameter combination has all simulator parameters varied at once, the simulator generates 1,000 sigmoid and no-class images at 64x64 resolution with smoothing applied, and the trained model is then validated on the real fixation labels. The search budget is 12 combinations for broad random, 48 for Latin hypercube, and 48 for Monte Carlo. Each combination is evaluated three times same as aboves experiment. This adds up to 325 ResNet18 training and evaluation runs in total, with runtime for simulation an training of 28h 23min. @tab:simulation-resnet18-64-results shows the starting parameters and the best candidate from each search method.
+
+// Sources:
+// - notebooks/data_generation/outputs/strategy_64x64_resnet18/posthoc_exports/baseline_summary.csv
+// - notebooks/data_generation/outputs/strategy_64x64_resnet18/posthoc_exports/method_summary.csv
+// - notebooks/data_generation/outputs/strategy_64x64_resnet18/posthoc_exports/top_per_strategy.csv
+#[
+  #show figure: set block(breakable: false)
+  #set text(size: 8pt)
+  #set par(justify: false)
+
+  #figure(
+    table(
+      columns: (2.2fr, 0.85fr, 0.85fr, 1.15fr),
+      inset: (x: 4pt, y: 3pt),
+      stroke: (x: none, y: 0.45pt + luma(190)),
+      fill: (_, y) => if y == 0 { rgb("#f3f5f7") },
+      align: (x, y) => {
+        if y == 0 {
+          center + horizon
+        } else if x > 0 {
+          center + top
+        } else {
+          left + top
+        }
+      },
+      table.header(
+        [Search method],
+        [BAcc],
+        [Macro-F1],
+        [Best at iteration],
+      ),
+
+      [Starting parameters],
+      [0.886],
+      [0.891],
+      [—],
+
+      [Broad random search],
+      [0.926],
+      [0.797],
+      [10 of 12],
+
+      [Latin hypercube search],
+      [0.916],
+      [0.782],
+      [21 of 48],
+
+      [Monte Carlo random search],
+      [0.904],
+      [0.852],
+      [38 of 48],
+    ),
+    caption: [ERP image size 64x64, pretrained ResNet18 sim-to-real results on the real fixation labels. The Best at iteration column gives the candidate index at which that best result occurred within the fixed search budget of the strategy. No later candidate of the same strategy reached a higher BAcc, for example for Latin hypercube the remaining 27 of 48 candidates yield no further improvement. The starting-parameter row uses one repeat.],
+  ) <tab:simulation-resnet18-64-results>
+]
+
+@tab:simulation-resnet18-64-timing breaks the wall-time of that previous experiment down into the three logged stages. Almost the entire runtime is spent generating the synthetic ERP images, while ResNet18 training and inference together add up to less than 15 minutes across all 325 repeats.
+
+// Sources:
+// - notebooks/data_generation/outputs/strategy_64x64_resnet18/posthoc_exports/all_repeats_raw.csv
+#[
+  #show figure: set block(breakable: false)
+  #set text(size: 8pt)
+  #set par(justify: false)
+
+  #figure(
+    table(
+      columns: (2.6fr, 1.05fr, 1.15fr),
+      inset: (x: 4pt, y: 3pt),
+      stroke: (x: none, y: 0.45pt + luma(190)),
+      fill: (_, y) => if y == 0 { rgb("#f3f5f7") },
+      align: (x, y) => {
+        if y == 0 {
+          center + horizon
+        } else if x > 0 {
+          center + top
+        } else {
+          left + top
+        }
+      },
+      table.header(
+        [Stage],
+        [Mean per repeat],
+        [Sum over 325 repeats],
+      ),
+
+      [Image simulation and preprocessing],
+      [311.7 s],
+      [28.1 h],
+
+      [ResNet18 training (8 epochs)],
+      [2.50 s],
+      [13.5 min],
+
+      [Inference on real fixation labels],
+      [0.020 s],
+      [6.4 s],
+    ),
+    caption: [Per-stage runtime of the 64x64 ResNet18 parameter search, aggregated over all 325 evaluated repeats. Image simulation includes the full ERP-image preprocessing pipeline, namely sorting trials, zscore across time points, applied smoothing filter and resize.],
+  ) <tab:simulation-resnet18-64-timing>
+]
+
+An earlier profiling run of the same simulation pipeline showed that about 84 percent of the per-image cost comes from the raw ERP simulation itself, while only about 16 percent is spent on the subsequent image-processing steps.
+
 == Classification Performance on Real Data
-The supervised real-data experiments use the manually labelled ERP-image pool. The class apperience is imbalanced, so balanced accuracy and macro-F1 remain the main comparison metrics.
+The supervised real-data experiments use the manually labelled ERP-image pool. The class distribution is imbalanced, so balanced accuracy and macro-F1 remain the main comparison metrics.
 
 // Sources:
 // - notebooks/week_21/outputs/week21_labeling_summary/summary.json
@@ -922,7 +1045,9 @@ The supervised real-data experiments use the manually labelled ERP-image pool. T
 ]
 
 
-TODO should the 1, 3, 10 CNN layer models also be mentioned. they underperformed under resnet18 and there is no gain in using resnet 34
+Before ResNet18 was adopted, it was compared against three shallower CNN baselines with 1, 3, and 10 convolutional layers under the same conditions for sim-to-real and real-to-real. The motivation was lower training cost, but the per-fold times stay within a few seconds of the pretrained ResNet18, a difference that is negligible for the project budget.
+
+The accuracy gap is much larger. The 1- and 3-layer CNNs often collapse to a single predicted class, the 10-layer CNN improves marginally, while the pretrained ResNet18 reaches overall best performances on the same data. ResNet34 matches this accuracy with increaseed training time, so the deeper variant adds cost without accuracy and ResNet18 remains the chosen model.
 
 // Sources:
 // - notebooks/week_21/outputs/resnet18_labeled_erp_cv/metrics_summary.csv
@@ -993,7 +1118,7 @@ TODO should the 1, 3, 10 CNN layer models also be mentioned. they underperformed
       [Labelled ResNet34 comparison],
       [ResNet34 pretrained],
       [12 labelled data sources],
-      [Backbone depth, resize to 128, binary pattern task],
+      [Backbone depth, resize to 128x128, binary pattern task],
       [0.854],
       [0.854],
 
@@ -1032,6 +1157,10 @@ TODO add more, computational power is fine. Maybe the ones from midterm and prop
 
 == Future Work
 One useful next step is a non-CNN baseline for the same ordered-matrix task. TODO transformer model
+
+TODO simulation speed up, currently its not feasable. better performance on multitheading
+
+todo simulation find parameters for each patterns rather than overall. in this case sigmoid was tested. all patterns may take up hole week of runtime. maybe data set per input dimensions, as cnn model can detect very accurately if a high resolution image was scaled down or a low resolution image was sclaed down.
 
 A second extension is localisation. The current classifier assigns one label to an entire ERP image, so it cannot mark where a pattern starts, ends, or overlaps with another structure. Detection-style biomedical imaging work such as Brain-RetinaNet shows how convolutional models can move from image-level classification towards localising relevant regions @Iqbal2026BrainRetinaNet. For ERP images, such a shift would require labels for pattern extents in trial-time space, not only image-level labels.
 
