@@ -652,7 +652,9 @@
   abstract-page()[#abstract]
 
   // Acknowledgements
-  acknowledgements-page()[#acknowledgements]
+  if acknowledgements != none {
+    acknowledgements-page()[#acknowledgements]
+  }
 
   // -- Outlines --
 

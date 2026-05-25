@@ -1,0 +1,33 @@
+{
+    "slice_variant_preprocessing": "variant sort/polarity -> zscore_timepoints -> gaussian smoothing",
+    "n_trials_valid_for_sort": 2508,
+    "gaussian_sigma": 75,
+    "slice_parent": "pipeline_images.sorted",
+    "figure_1_panel_paths": [
+        "/home/benjamin/Dokumente/BA2/notebooks/week_24/outputs/pipeline_visualisations/figure_1a_raw_erp_image.png",
+        "/home/benjamin/Dokumente/BA2/notebooks/week_24/outputs/pipeline_visualisations/figure_1b_sorted_by_duration.png",
+        "/home/benjamin/Dokumente/BA2/notebooks/week_24/outputs/pipeline_visualisations/figure_1c_z_scored_per_time_point.png",
+        "/home/benjamin/Dokumente/BA2/notebooks/week_24/outputs/pipeline_visualisations/figure_1d_gaussian_smoothed.png"
+    ],
+    "dataset_key": "fixations_dataset",
+    "sort_variable": "duration",
+    "n_trials_filtered_out": 0,
+    "target_trials_slice": 627,
+    "n_trials_original": 2508,
+    "figure_1_format": "four square single-panel PNG/SVG exports",
+    "figure_2_svg_path": "/home/benjamin/Dokumente/BA2/notebooks/week_24/outputs/pipeline_visualisations/figure_2_trial_slicing_augmentation.svg",
+    "channel_name": "ch096",
+    "figure_2_path": "/home/benjamin/Dokumente/BA2/notebooks/week_24/outputs/pipeline_visualisations/figure_2_trial_slicing_augmentation.png",
+    "image_dimensions_trials_time": [
+        2508,
+        513
+    ],
+    "figure_1_panel_svg_paths": [
+        "/home/benjamin/Dokumente/BA2/notebooks/week_24/outputs/pipeline_visualisations/figure_1a_raw_erp_image.svg",
+        "/home/benjamin/Dokumente/BA2/notebooks/week_24/outputs/pipeline_visualisations/figure_1b_sorted_by_duration.svg",
+        "/home/benjamin/Dokumente/BA2/notebooks/week_24/outputs/pipeline_visualisations/figure_1c_z_scored_per_time_point.svg",
+        "/home/benjamin/Dokumente/BA2/notebooks/week_24/outputs/pipeline_visualisations/figure_1d_gaussian_smoothed.svg"
+    ],
+    "sort_ascending_verified": true,
+    "timestamp": "2026-05-24T22:02:54.738"
+}
