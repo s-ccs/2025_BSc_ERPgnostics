@@ -1141,6 +1141,112 @@ function reference_channel_names()
     return names
 end
 
+function dataset_channels(dataset_key::AbstractString)
+    files = filter(path -> endswith(path, ".jld2"), readdir(signals_dir(dataset_key); join = false))
+    rows = NamedTuple[]
+    for file in files
+        channel_name = replace(file, ".jld2" => "")
+        metadata = JLD2.load(signal_path(dataset_key, channel_name), "metadata")
+        push!(rows, (
+            dataset_key = String(dataset_key),
+            channel_name = channel_name,
+            channel_idx = Int(get(metadata, "channel_idx", channel_index_from_name(channel_name))),
+        ))
+    end
+    channels = DataFrame(rows)
+    sort!(channels, [:channel_idx, :channel_name])
+    return channels
+end
+
+dataset_channel_names(dataset_key::AbstractString) = String.(dataset_channels(dataset_key).channel_name)
+
+function dataset_sort_variable_summary(labels_df::DataFrame)
+    isempty(labels_df) && return DataFrame(
+        dataset_key = String[],
+        dataset_label = String[],
+        sort_variable = String[],
+        n_pattern = Int[],
+        n_labels = Int[],
+    )
+    summary = combine(
+        groupby(labels_df, [:dataset_key, :dataset_label, :sort_variable]),
+        :binary_label => sum => :n_pattern,
+        nrow => :n_labels,
+    )
+    sort!(summary, [:dataset_key, :n_pattern, :sort_variable], rev = [false, true, false])
+    return summary
+end
+
+function positive_dataset_sort_variable_summary(labels_df::DataFrame)
+    summary = dataset_sort_variable_summary(labels_df)
+    isempty(summary) && return summary
+    out = summary[Int.(summary.n_pattern) .> 0, :]
+    sort!(out, [:dataset_key, :n_pattern, :sort_variable], rev = [false, true, false])
+    return out
+end
+
+function sort_variables_for_dataset(labels_df::DataFrame, dataset_key::AbstractString; require_pattern::Bool = true)
+    summary = dataset_sort_variable_summary(labels_df)
+    sub = summary[summary.dataset_key .== String(dataset_key), :]
+    require_pattern && (sub = sub[Int.(sub.n_pattern) .> 0, :])
+    sort!(sub, [:n_pattern, :sort_variable], rev = [true, false])
+    return String.(sub.sort_variable)
+end
+
+function dataset_sort_variable_map(labels_df::DataFrame; require_pattern::Bool = true)
+    out = Dict{String, Vector{String}}()
+    for dataset_key in discover_real_dataset_keys()
+        sort_variables = sort_variables_for_dataset(labels_df, dataset_key; require_pattern = require_pattern)
+        isempty(sort_variables) || (out[String(dataset_key)] = sort_variables)
+    end
+    return out
+end
+
+function datasets_with_pattern_sort_variables(labels_df::DataFrame)
+    summary = positive_dataset_sort_variable_summary(labels_df)
+    return sort(unique(String.(summary.dataset_key)))
+end
+
+function combined_label_lookup(labels_df::DataFrame)
+    erp_lookup = Dict{Tuple{String, String, String}, String}()
+    binary_lookup = Dict{Tuple{String, String, String}, Int}()
+    count_lookup = Dict{Tuple{String, String, String}, Int}()
+    pattern_count_lookup = Dict{Tuple{String, String, String}, Int}()
+
+    isempty(labels_df) && return (
+        erp_class = erp_lookup,
+        binary_label = binary_lookup,
+        n_manual_labels = count_lookup,
+        n_manual_pattern_labels = pattern_count_lookup,
+    )
+
+    for group in groupby(labels_df, [:dataset_key, :sort_variable, :channel_name])
+        first_row = group[1, :]
+        key = (
+            cellstr(first_row.dataset_key),
+            cellstr(first_row.sort_variable),
+            cellstr(first_row.channel_name),
+        )
+        positive_idxs = findall(Int.(group.binary_label) .== 1)
+        count_lookup[key] = nrow(group)
+        pattern_count_lookup[key] = length(positive_idxs)
+        if isempty(positive_idxs)
+            erp_lookup[key] = "no_class"
+            binary_lookup[key] = 0
+        else
+            erp_lookup[key] = cellstr(group.erp_class[first(positive_idxs)])
+            binary_lookup[key] = 1
+        end
+    end
+
+    return (
+        erp_class = erp_lookup,
+        binary_label = binary_lookup,
+        n_manual_labels = count_lookup,
+        n_manual_pattern_labels = pattern_count_lookup,
+    )
+end
+
 function true_label_lookup(labels_df::DataFrame)
     ref = reference_labels(labels_df)
     lookup = Dict{Tuple{String, String}, String}()
@@ -1150,53 +1256,82 @@ function true_label_lookup(labels_df::DataFrame)
     return lookup
 end
 
-function score_reference_parent_images(model, device::Function;
+function score_dataset_parent_images(model, device::Function;
         labels_df::DataFrame,
-        sort_variables::Vector{String},
-        channels::Vector{String} = reference_channel_names(),
+        dataset_sort_variables::Dict{String, Vector{String}} = dataset_sort_variable_map(labels_df; require_pattern = true),
+        channels_by_dataset::Dict{String, Vector{String}} = Dict{String, Vector{String}}(),
         batchsize::Int = Generalization.PREDICT_BATCHSIZE)
 
     ctx = build_data_context()
     rows = NamedTuple[]
     images = Matrix{Float32}[]
-    label_lookup = true_label_lookup(labels_df)
+    skipped = NamedTuple[]
+    label_lookup = combined_label_lookup(labels_df)
 
-    for sort_variable in sort_variables
-        sort_col = Symbol(sort_variable)
-        for channel_name in channels
-            row_like = (
-                dataset_key = REFERENCE_DATASET_KEY,
-                channel_name = channel_name,
-                sort_variable = sort_variable,
-            )
-            origin_raw = origin_for_label(row_like, ctx)
-            origin = filtered_origin_for_sort(origin_raw, sort_col)
+    for dataset_key in sort(collect(keys(dataset_sort_variables)))
+        sort_variables = dataset_sort_variables[String(dataset_key)]
+        isempty(sort_variables) && continue
+        channels = get(channels_by_dataset, String(dataset_key), dataset_channel_names(dataset_key))
 
-            for (augmentation_variant_index, augmentation) in enumerate(AUGMENTATION_VARIANTS)
-                img = preprocess_model_image(origin.data_time_trials, origin.events, sort_col, augmentation)
-                parent_image_id = join([REFERENCE_DATASET_KEY, channel_name, sort_variable, "full_parent"], "::")
-                push!(rows, (
-                    parent_image_id = parent_image_id,
-                    dataset_key = REFERENCE_DATASET_KEY,
-                    channel_name = channel_name,
-                    channel_idx = Int(origin.channel_idx),
-                    sort_variable = sort_variable,
-                    true_erp_class = get(label_lookup, (sort_variable, channel_name), "unlabelled"),
-                    true_binary_label = get(label_lookup, (sort_variable, channel_name), "no_class") == "no_class" ? 0 : 1,
-                    augmentation_variant_index = Int(augmentation_variant_index),
-                    augmentation_name = String(augmentation.name),
-                    augmentation_label = String(augmentation.label),
-                    inverse_sort = Bool(augmentation.inverse_sort),
-                    inverse_polarity = Bool(augmentation.inverse_polarity),
-                    n_trials = Int(origin.n_trials),
-                    n_timepoints = Int(origin.n_timepoints),
-                ))
-                push!(images, img)
+        for sort_variable in sort_variables
+            sort_col = Symbol(sort_variable)
+            for channel_name in channels
+                row_like = (
+                    dataset_key = String(dataset_key),
+                    channel_name = String(channel_name),
+                    sort_variable = String(sort_variable),
+                )
+                origin = try
+                    origin_raw = origin_for_label(row_like, ctx)
+                    filtered_origin_for_sort(origin_raw, sort_col)
+                catch err
+                    push!(skipped, (
+                        dataset_key = String(dataset_key),
+                        channel_name = String(channel_name),
+                        sort_variable = String(sort_variable),
+                        reason = sprint(showerror, err),
+                    ))
+                    continue
+                end
+
+                dataset_label = String(get(origin.metadata, "dataset_label", dataset_key))
+                label_key = (String(dataset_key), String(sort_variable), String(channel_name))
+                true_erp_class = get(label_lookup.erp_class, label_key, "unlabelled")
+                true_binary_label = get(label_lookup.binary_label, label_key, 0)
+                n_manual_labels = get(label_lookup.n_manual_labels, label_key, 0)
+                n_manual_pattern_labels = get(label_lookup.n_manual_pattern_labels, label_key, 0)
+
+                for (augmentation_variant_index, augmentation) in enumerate(AUGMENTATION_VARIANTS)
+                    img = preprocess_model_image(origin.data_time_trials, origin.events, sort_col, augmentation)
+                    parent_image_id = join([String(dataset_key), String(channel_name), String(sort_variable), "full_parent"], "::")
+                    push!(rows, (
+                        parent_image_id = parent_image_id,
+                        dataset_key = String(dataset_key),
+                        dataset_label = dataset_label,
+                        channel_name = String(channel_name),
+                        channel_idx = Int(origin.channel_idx),
+                        sort_variable = String(sort_variable),
+                        true_erp_class = true_erp_class,
+                        true_binary_label = Int(true_binary_label),
+                        has_manual_label = n_manual_labels > 0,
+                        n_manual_labels = Int(n_manual_labels),
+                        n_manual_pattern_labels = Int(n_manual_pattern_labels),
+                        augmentation_variant_index = Int(augmentation_variant_index),
+                        augmentation_name = String(augmentation.name),
+                        augmentation_label = String(augmentation.label),
+                        inverse_sort = Bool(augmentation.inverse_sort),
+                        inverse_polarity = Bool(augmentation.inverse_polarity),
+                        n_trials = Int(origin.n_trials),
+                        n_timepoints = Int(origin.n_timepoints),
+                    ))
+                    push!(images, img)
+                end
             end
         end
     end
 
     aug_df = DataFrame(rows)
+    isempty(aug_df) && error("No parent ERP images were materialized for scoring. Check labels and dataset_sort_variables.")
     aug_df.processed_img = images
     X = CNNUtils.images_to_tensor(images)
     logits, probs = Generalization.predict_logits_probs(model, X; batchsize = batchsize, device = device)
@@ -1206,17 +1341,91 @@ function score_reference_parent_images(model, device::Function;
     aug_df.prob_class = Float32.(probs[2, :])
 
     score_df = combine(
-        groupby(aug_df, [:parent_image_id, :dataset_key, :channel_name, :channel_idx, :sort_variable, :true_erp_class, :true_binary_label]),
+        groupby(aug_df, [
+            :parent_image_id,
+            :dataset_key,
+            :dataset_label,
+            :channel_name,
+            :channel_idx,
+            :sort_variable,
+            :true_erp_class,
+            :true_binary_label,
+            :has_manual_label,
+            :n_manual_labels,
+            :n_manual_pattern_labels,
+        ]),
         :prob_class => mean => :score_class,
         :prob_class => std => :score_class_std,
         :prob_class => minimum => :score_class_min,
         :prob_class => maximum => :score_class_max,
         nrow => :n_augmentations,
     )
-    sort!(score_df, [:sort_variable, :channel_idx])
+    sort!(score_df, [:dataset_key, :sort_variable, :channel_idx, :channel_name])
     return (
         score_df = score_df,
         augmentation_df = aug_df,
+        skipped_df = DataFrame(skipped),
+        dataset_sort_variables = dataset_sort_variables,
+    )
+end
+
+function score_reference_parent_images(model, device::Function;
+        labels_df::DataFrame,
+        sort_variables::Vector{String},
+        channels::Vector{String} = reference_channel_names(),
+        batchsize::Int = Generalization.PREDICT_BATCHSIZE)
+
+    result = score_dataset_parent_images(
+        model,
+        device;
+        labels_df = labels_df,
+        dataset_sort_variables = Dict(REFERENCE_DATASET_KEY => sort_variables),
+        channels_by_dataset = Dict(REFERENCE_DATASET_KEY => channels),
+        batchsize = batchsize,
+    )
+    return (
+        score_df = result.score_df,
+        augmentation_df = result.augmentation_df,
+    )
+end
+
+PARENT_SCORES_BASENAME = "all_parent_scores.csv"
+AUGMENTATION_SCORES_BASENAME = "all_augmentation_scores.csv"
+SKIPPED_PARENT_SCORES_BASENAME = "all_parent_score_skipped_rows.csv"
+
+parent_scores_path(output_dir::AbstractString) = joinpath(output_dir, PARENT_SCORES_BASENAME)
+augmentation_scores_path(output_dir::AbstractString) = joinpath(output_dir, AUGMENTATION_SCORES_BASENAME)
+skipped_parent_scores_path(output_dir::AbstractString) = joinpath(output_dir, SKIPPED_PARENT_SCORES_BASENAME)
+
+function saved_parent_scores_available(output_dir::AbstractString)
+    return isfile(parent_scores_path(output_dir)) && isfile(augmentation_scores_path(output_dir))
+end
+
+function save_parent_score_outputs(output_dir::AbstractString, score_result)
+    mkpath(output_dir)
+    CSV.write(parent_scores_path(output_dir), score_result.score_df)
+    CSV.write(augmentation_scores_path(output_dir), select(score_result.augmentation_df, Not(:processed_img)))
+    if hasproperty(score_result, :skipped_df)
+        CSV.write(skipped_parent_scores_path(output_dir), score_result.skipped_df)
+    end
+    return (
+        parent_scores_path = parent_scores_path(output_dir),
+        augmentation_scores_path = augmentation_scores_path(output_dir),
+        skipped_parent_scores_path = skipped_parent_scores_path(output_dir),
+    )
+end
+
+function load_parent_score_outputs(output_dir::AbstractString)
+    saved_parent_scores_available(output_dir) || error("Missing saved parent score CSV files in $(output_dir).")
+    score_df = CSV.read(parent_scores_path(output_dir), DataFrame)
+    augmentation_df = CSV.read(augmentation_scores_path(output_dir), DataFrame)
+    skipped_df = isfile(skipped_parent_scores_path(output_dir)) ?
+        CSV.read(skipped_parent_scores_path(output_dir), DataFrame) :
+        DataFrame()
+    return (
+        score_df = score_df,
+        augmentation_df = augmentation_df,
+        skipped_df = skipped_df,
     )
 end
 
@@ -1245,6 +1454,50 @@ function load_reference_positions()
     return DataFrame(rows)
 end
 
+function synthetic_channel_positions(dataset_key::AbstractString)
+    channels = dataset_channels(dataset_key)
+    n = nrow(channels)
+    rows = NamedTuple[]
+    if n == 0
+        return DataFrame(
+            dataset_key = String[],
+            channel_name = String[],
+            channel_idx = Int[],
+            x = Float64[],
+            y = Float64[],
+        )
+    end
+
+    golden_angle = pi * (3 - sqrt(5))
+    for (rank, row) in enumerate(eachrow(channels))
+        if n == 1
+            x, y = 0.5, 0.5
+        else
+            radius = 0.48 * sqrt((rank - 0.5) / n)
+            theta = rank * golden_angle
+            x = 0.5 + radius * cos(theta)
+            y = 0.5 + radius * sin(theta)
+        end
+        push!(rows, (
+            dataset_key = String(dataset_key),
+            channel_name = cellstr(row.channel_name),
+            channel_idx = Int(row.channel_idx),
+            x = Float64(x),
+            y = Float64(y),
+        ))
+    end
+    return DataFrame(rows)
+end
+
+function load_dataset_positions(dataset_key::AbstractString)
+    if String(dataset_key) == REFERENCE_DATASET_KEY && isfile(REFERENCE_POSITIONS_PATH)
+        ref = load_reference_positions()
+        ref.dataset_key = fill(REFERENCE_DATASET_KEY, nrow(ref))
+        return select(ref, [:dataset_key, :channel_name, :channel_idx, :x, :y])
+    end
+    return synthetic_channel_positions(dataset_key)
+end
+
 function draw_head_outline!(ax)
     theta = range(0, 2pi; length = 241)
     lines!(ax, 0.5 .+ 0.52 .* cos.(theta), 0.5 .+ 0.52 .* sin.(theta); color = :gray35, linewidth = 2, inspectable = false)
@@ -1254,7 +1507,7 @@ function draw_head_outline!(ax)
     return ax
 end
 
-function closest_reference_channel_index(mouse_pos, positions::DataFrame)
+function closest_channel_index(mouse_pos, positions::DataFrame)
     best_idx = 1
     best_dist_sq = Inf
     for i in 1:nrow(positions)
@@ -1269,16 +1522,35 @@ function closest_reference_channel_index(mouse_pos, positions::DataFrame)
     return best_idx
 end
 
-function score_positions(score_df::DataFrame, sort_variable::AbstractString)
-    positions = load_reference_positions()
-    sub = score_df[score_df.sort_variable .== String(sort_variable), :]
-    out = leftjoin(positions, sub; on = [:channel_name, :channel_idx])
+closest_reference_channel_index(mouse_pos, positions::DataFrame) = closest_channel_index(mouse_pos, positions)
+
+function score_positions(score_df::DataFrame, dataset_key::AbstractString, sort_variable::AbstractString)
+    positions = load_dataset_positions(dataset_key)
+    sub = score_df[
+        (score_df.dataset_key .== String(dataset_key)) .&
+        (score_df.sort_variable .== String(sort_variable)),
+        :,
+    ]
+    out = leftjoin(positions, sub; on = [:dataset_key, :channel_name, :channel_idx])
     out.score_class = coalesce.(out.score_class, 0.0f0)
     out.true_binary_label = coalesce.(out.true_binary_label, 0)
     out.true_erp_class = coalesce.(out.true_erp_class, "unlabelled")
+    if :has_manual_label in propertynames(out)
+        out.has_manual_label = coalesce.(out.has_manual_label, false)
+    else
+        out.has_manual_label = out.true_erp_class .!= "unlabelled"
+    end
+    if :n_manual_pattern_labels in propertynames(out)
+        out.n_manual_pattern_labels = coalesce.(out.n_manual_pattern_labels, 0)
+    else
+        out.n_manual_pattern_labels = Int.(out.true_binary_label)
+    end
     sort!(out, :channel_idx)
     return out
 end
+
+score_positions(score_df::DataFrame, sort_variable::AbstractString) =
+    score_positions(score_df, REFERENCE_DATASET_KEY, sort_variable)
 
 function score_colorrange(values; mode::Symbol = :adaptive)
     vals = Float64.(collect(skipmissing(values)))
@@ -1303,20 +1575,76 @@ function score_range_label(values)
     return @sprintf("score range %.4g-%.4g", minimum(vals), maximum(vals))
 end
 
+function score_dataset_keys(score_df::DataFrame)
+    return sort(unique(String.(score_df.dataset_key)))
+end
+
+function score_sort_variables(score_df::DataFrame, dataset_key::AbstractString)
+    sub = score_df[score_df.dataset_key .== String(dataset_key), :]
+    sort_variables = unique(String.(sub.sort_variable))
+    sort!(sort_variables)
+    return sort_variables
+end
+
+function initial_dataset_key(score_df::DataFrame)
+    keys = score_dataset_keys(score_df)
+    REFERENCE_DATASET_KEY in keys && return REFERENCE_DATASET_KEY
+    isempty(keys) && error("score_df does not contain any dataset_key values.")
+    return first(keys)
+end
+
+function initial_sort_variable(score_df::DataFrame, dataset_key::AbstractString)
+    vars = score_sort_variables(score_df, dataset_key)
+    isempty(vars) && error("No scored sort variables for $(dataset_key).")
+    "duration" in vars && return "duration"
+    return first(vars)
+end
+
+function initial_channel_name(score_df::DataFrame, dataset_key::AbstractString, sort_variable::AbstractString)
+    sub = score_df[
+        (score_df.dataset_key .== String(dataset_key)) .&
+        (score_df.sort_variable .== String(sort_variable)),
+        :,
+    ]
+    isempty(sub) && error("No scored channels for $(dataset_key), $(sort_variable).")
+    if String(dataset_key) == REFERENCE_DATASET_KEY && REFERENCE_INITIAL_CHANNEL in String.(sub.channel_name)
+        return REFERENCE_INITIAL_CHANNEL
+    end
+    positives = sub[Int.(sub.true_binary_label) .== 1, :]
+    if !isempty(positives)
+        sort!(positives, [:channel_idx, :channel_name])
+        return cellstr(positives.channel_name[1])
+    end
+    sort!(sub, [:channel_idx, :channel_name])
+    return cellstr(sub.channel_name[1])
+end
+
 function plot_reference_score_topoplots(score_df::DataFrame;
         sort_variables::Vector{String} = reference_sort_variables,
+        colorrange_mode::Symbol = :adaptive)
+
+    return plot_dataset_score_topoplots(
+        score_df,
+        REFERENCE_DATASET_KEY;
+        sort_variables = sort_variables,
+        colorrange_mode = colorrange_mode,
+    )
+end
+
+function plot_dataset_score_topoplots(score_df::DataFrame, dataset_key::AbstractString;
+        sort_variables::Vector{String} = score_sort_variables(score_df, dataset_key),
         colorrange_mode::Symbol = :adaptive)
 
     CairoMakie.activate!(type = "svg")
     fig = Figure(size = (700 * length(sort_variables), 820), figure_padding = 24)
     for (col, sort_variable) in enumerate(sort_variables)
-        pos = score_positions(score_df, sort_variable)
+        pos = score_positions(score_df, dataset_key, sort_variable)
         n_manual = sum(Int.(pos.true_binary_label) .== 1)
         crange = score_colorrange(pos.score_class; mode = colorrange_mode)
         colorbar_label = colorrange_mode == :probability ? "mean class probability" : "mean class probability (adaptive)"
         ax = Axis(
             fig[1, col];
-            title = "$(sort_variable)\nmanual pattern labels: $(n_manual)\n$(score_range_label(pos.score_class))",
+            title = "$(dataset_key)\n$(sort_variable)\nmanual pattern labels: $(n_manual)\n$(score_range_label(pos.score_class))",
             titlesize = 28,
             aspect = DataAspect(),
         )
@@ -1338,19 +1666,6 @@ function plot_reference_score_topoplots(score_df::DataFrame;
             strokecolor = :gray15,
         )
 
-        manual_idx = findall(Int.(pos.true_binary_label) .== 1)
-        if !isempty(manual_idx)
-            scatter!(
-                ax,
-                pos.x[manual_idx],
-                pos.y[manual_idx];
-                color = RGBAf(0, 0, 0, 0),
-                markersize = 34,
-                strokewidth = 2.8,
-                strokecolor = :black,
-            )
-        end
-
         text!(
             ax,
             pos.x,
@@ -1367,15 +1682,15 @@ function plot_reference_score_topoplots(score_df::DataFrame;
     return fig
 end
 
-DETAIL_CACHE = Dict{Tuple{String, String}, Any}()
-INTERACTIVE_DETAIL_CACHE = Dict{Tuple{String, String, Int, Int}, Any}()
+DETAIL_CACHE = Dict{Tuple{String, String, String}, Any}()
+INTERACTIVE_DETAIL_CACHE = Dict{Tuple{String, String, String, Int, Int}, Any}()
 
-function reference_detail(sort_variable::AbstractString, channel_name::AbstractString)
-    key = (String(sort_variable), String(channel_name))
+function dataset_detail(dataset_key::AbstractString, sort_variable::AbstractString, channel_name::AbstractString)
+    key = (String(dataset_key), String(sort_variable), String(channel_name))
     return get!(DETAIL_CACHE, key) do
         ctx = shared_data_context()
         row_like = (
-            dataset_key = REFERENCE_DATASET_KEY,
+            dataset_key = String(dataset_key),
             channel_name = String(channel_name),
             sort_variable = String(sort_variable),
         )
@@ -1415,8 +1730,17 @@ function reference_detail(sort_variable::AbstractString, channel_name::AbstractS
     end
 end
 
+reference_detail(sort_variable::AbstractString, channel_name::AbstractString) =
+    dataset_detail(REFERENCE_DATASET_KEY, sort_variable, channel_name)
+
 function resize_detail_image(img::AbstractMatrix; max_trials::Int = 900, max_timepoints::Int = 520)
     target_size = (min(size(img, 1), max_trials), min(size(img, 2), max_timepoints))
+    target_size == size(img) && return Float32.(img)
+    return Float32.(imresize(Float32.(img), target_size))
+end
+
+function resize_detail_image_fixed(img::AbstractMatrix; n_trials::Int = 700, n_timepoints::Int = 520)
+    target_size = (Int(n_trials), Int(n_timepoints))
     target_size == size(img) && return Float32.(img)
     return Float32.(imresize(Float32.(img), target_size))
 end
@@ -1430,15 +1754,24 @@ function downsample_vector_for_display(values, target_length::Int)
     return collect(values[idxs])
 end
 
-function reference_detail_interactive(sort_variable::AbstractString, channel_name::AbstractString;
+function resample_vector_for_display(values, target_length::Int)
+    source_length = length(values)
+    source_length == target_length && return collect(values)
+    target_length <= 0 && return eltype(values)[]
+    source_length == 0 && return eltype(values)[]
+    idxs = clamp.(round.(Int, range(1, source_length; length = target_length)), 1, source_length)
+    return collect(values[idxs])
+end
+
+function dataset_detail_interactive(dataset_key::AbstractString, sort_variable::AbstractString, channel_name::AbstractString;
         max_trials::Int = 700,
         max_timepoints::Int = 520)
 
-    key = (String(sort_variable), String(channel_name), Int(max_trials), Int(max_timepoints))
+    key = (String(dataset_key), String(sort_variable), String(channel_name), Int(max_trials), Int(max_timepoints))
     return get!(INTERACTIVE_DETAIL_CACHE, key) do
         ctx = shared_data_context()
         row_like = (
-            dataset_key = REFERENCE_DATASET_KEY,
+            dataset_key = String(dataset_key),
             channel_name = String(channel_name),
             sort_variable = String(sort_variable),
         )
@@ -1449,8 +1782,15 @@ function reference_detail_interactive(sort_variable::AbstractString, channel_nam
         data_sorted = origin.data_time_trials[:, order]
         sort_values_full = sortvalues_from(origin.events, sort_col)[order]
 
+        display_n_trials = Int(max_trials)
+        display_n_timepoints = Int(max_timepoints)
+
         z = zscore_timepoints_local(data_sorted)
-        img = resize_detail_image(Float32.(permutedims(z, (2, 1))); max_trials = max_trials, max_timepoints = max_timepoints)
+        img = resize_detail_image_fixed(
+            Float32.(permutedims(z, (2, 1)));
+            n_trials = display_n_trials,
+            n_timepoints = display_n_timepoints,
+        )
         smoothed = CNNUtils.apply_gaussian_pre_resize(
             img;
             target_size = size(img),
@@ -1461,11 +1801,11 @@ function reference_detail_interactive(sort_variable::AbstractString, channel_nam
 
         time_start_s = Float64(get(origin.metadata, "time_start_s", 0.0))
         time_end_s = Float64(get(origin.metadata, "time_end_s", 1.0))
-        times = collect(range(time_start_s, time_end_s; length = size(smoothed, 2)))
-        trials = collect(range(1, size(data_sorted, 2); length = size(smoothed, 1)))
-        sort_values = downsample_vector_for_display(sort_values_full, size(smoothed, 1))
+        times = collect(range(time_start_s, time_end_s; length = display_n_timepoints))
+        trials = collect(range(1, size(data_sorted, 2); length = display_n_trials))
+        sort_values = resample_vector_for_display(sort_values_full, display_n_trials)
         mean_wave_full = vec(mean(data_sorted; dims = 2))
-        mean_wave = Float32.(downsample_vector_for_display(mean_wave_full, size(smoothed, 2)))
+        mean_wave = Float32.(resample_vector_for_display(mean_wave_full, display_n_timepoints))
 
         return (
             image = smoothed,
@@ -1482,6 +1822,19 @@ function reference_detail_interactive(sort_variable::AbstractString, channel_nam
     end
 end
 
+function reference_detail_interactive(sort_variable::AbstractString, channel_name::AbstractString;
+        max_trials::Int = 700,
+        max_timepoints::Int = 520)
+
+    return dataset_detail_interactive(
+        REFERENCE_DATASET_KEY,
+        sort_variable,
+        channel_name;
+        max_trials = max_trials,
+        max_timepoints = max_timepoints,
+    )
+end
+
 function erp_image_color_stats(img::AbstractMatrix; q_low::Float64 = 0.02, q_high::Float64 = 0.98)
     clipped, colorrange, tick_vals, tick_labels, cmap =
         CNNUtils.clipped_color_stats_quantile_zero_ticks(Float32.(img); q_low = q_low, q_high = q_high)
@@ -1493,11 +1846,19 @@ function erp_image_color_stats(img::AbstractMatrix; q_low::Float64 = 0.02, q_hig
     )
 end
 
-function score_row(score_df::DataFrame, sort_variable::AbstractString, channel_name::AbstractString)
-    idx = findfirst(i -> score_df.sort_variable[i] == String(sort_variable) && score_df.channel_name[i] == String(channel_name), 1:nrow(score_df))
+function score_row(score_df::DataFrame, dataset_key::AbstractString, sort_variable::AbstractString, channel_name::AbstractString)
+    idx = findfirst(
+        i -> score_df.dataset_key[i] == String(dataset_key) &&
+            score_df.sort_variable[i] == String(sort_variable) &&
+            score_df.channel_name[i] == String(channel_name),
+        1:nrow(score_df),
+    )
     idx === nothing && return nothing
     return score_df[idx, :]
 end
+
+score_row(score_df::DataFrame, sort_variable::AbstractString, channel_name::AbstractString) =
+    score_row(score_df, REFERENCE_DATASET_KEY, sort_variable, channel_name)
 
 function numeric_sort_values(values)
     try
@@ -1518,8 +1879,20 @@ end
 function plot_reference_parent_image(score_df::DataFrame, sort_variable::AbstractString, channel_name::AbstractString;
         figure_size = (1550, 1450))
 
-    detail = reference_detail(sort_variable, channel_name)
-    row = score_row(score_df, sort_variable, channel_name)
+    return plot_dataset_parent_image(
+        score_df,
+        REFERENCE_DATASET_KEY,
+        sort_variable,
+        channel_name;
+        figure_size = figure_size,
+    )
+end
+
+function plot_dataset_parent_image(score_df::DataFrame, dataset_key::AbstractString, sort_variable::AbstractString, channel_name::AbstractString;
+        figure_size = (1550, 1450))
+
+    detail = dataset_detail(dataset_key, sort_variable, channel_name)
+    row = score_row(score_df, dataset_key, sort_variable, channel_name)
     score = row === nothing ? NaN : Float64(row.score_class)
     true_class = row === nothing ? "unlabelled" : cellstr(row.true_erp_class)
 
@@ -1528,7 +1901,8 @@ function plot_reference_parent_image(score_df::DataFrame, sort_variable::Abstrac
 
     fig = Figure(size = figure_size, figure_padding = 28)
     title = @sprintf(
-        "%s | %s | ResNet18 parent score = %.3f | manual label = %s",
+        "%s | %s | %s | ResNet18 parent score = %.3f | manual label = %s",
+        dataset_key,
         channel_name,
         sort_variable,
         score,
@@ -1585,19 +1959,43 @@ function plot_reference_parent_image(score_df::DataFrame, sort_variable::Abstrac
     return fig
 end
 
-function plot_augmented_model_inputs(augmentation_score_df::DataFrame, sort_variable::AbstractString, channel_name::AbstractString;
-        figure_size = (1100, 950))
+function parent_augmentation_images(dataset_key::AbstractString, sort_variable::AbstractString, channel_name::AbstractString)
+    ctx = shared_data_context()
+    row_like = (
+        dataset_key = String(dataset_key),
+        channel_name = String(channel_name),
+        sort_variable = String(sort_variable),
+    )
+    origin_raw = origin_for_label(row_like, ctx)
+    origin = filtered_origin_for_sort(origin_raw, Symbol(sort_variable))
+    return [
+        preprocess_model_image(origin.data_time_trials, origin.events, Symbol(sort_variable), augmentation)
+        for augmentation in AUGMENTATION_VARIANTS
+    ]
+end
 
+function augmentation_rows_with_images(augmentation_score_df::DataFrame, dataset_key::AbstractString, sort_variable::AbstractString, channel_name::AbstractString)
     sub = augmentation_score_df[
+        (augmentation_score_df.dataset_key .== String(dataset_key)) .&
         (augmentation_score_df.sort_variable .== String(sort_variable)) .&
         (augmentation_score_df.channel_name .== String(channel_name)),
         :,
     ]
     sort!(sub, :augmentation_variant_index)
-    nrow(sub) == length(AUGMENTATION_VARIANTS) || error("Expected four augmentation rows for $(channel_name), $(sort_variable).")
+    nrow(sub) == length(AUGMENTATION_VARIANTS) || error("Expected four augmentation rows for $(dataset_key), $(channel_name), $(sort_variable).")
+    if !(:processed_img in propertynames(sub))
+        sub.processed_img = parent_augmentation_images(dataset_key, sort_variable, channel_name)
+    end
+    return sub
+end
+
+function plot_augmented_model_inputs(augmentation_score_df::DataFrame, dataset_key::AbstractString, sort_variable::AbstractString, channel_name::AbstractString;
+        figure_size = (1100, 950))
+
+    sub = augmentation_rows_with_images(augmentation_score_df, dataset_key, sort_variable, channel_name)
 
     fig = Figure(size = figure_size, figure_padding = 24)
-    Label(fig[1, 1:2], "Model-input augmentations | $(channel_name) | $(sort_variable)"; fontsize = 30, tellwidth = false)
+    Label(fig[1, 1:2], "Model-input augmentations | $(dataset_key) | $(channel_name) | $(sort_variable)"; fontsize = 30, tellwidth = false)
 
     for (i, row) in enumerate(eachrow(sub))
         r = div(i - 1, 2) + 2
@@ -1618,6 +2016,18 @@ function plot_augmented_model_inputs(augmentation_score_df::DataFrame, sort_vari
     return fig
 end
 
+function plot_augmented_model_inputs(augmentation_score_df::DataFrame, sort_variable::AbstractString, channel_name::AbstractString;
+        figure_size = (1100, 950))
+
+    return plot_augmented_model_inputs(
+        augmentation_score_df,
+        REFERENCE_DATASET_KEY,
+        sort_variable,
+        channel_name;
+        figure_size = figure_size,
+    )
+end
+
 
 # %% [markdown]
 # ## Interactive topoplot explorer
@@ -1629,6 +2039,307 @@ end
 # average `prob_class` across all four augmentations.
 
 # %%
+function interactive_dataset_explorer(score_df::DataFrame, augmentation_score_df::DataFrame;
+        dataset_keys::Vector{String} = score_dataset_keys(score_df),
+        initial_dataset_key::AbstractString = initial_dataset_key(score_df),
+        initial_sort_variable::AbstractString = initial_sort_variable(score_df, initial_dataset_key),
+        initial_channel::AbstractString = initial_channel_name(score_df, initial_dataset_key, initial_sort_variable),
+        use_original_erp_images::Bool = true,
+        interactive_max_trials::Int = 700,
+        interactive_max_timepoints::Int = 520,
+        initialize_page::Bool = true)
+
+    initialize_page && WGLMakie.Page(offline = false, exportable = false)
+    WGLMakie.activate!(; use_html_widgets = false)
+
+    dataset_keys = [String(key) for key in dataset_keys if !isempty(score_sort_variables(score_df, key))]
+    isempty(dataset_keys) && error("No scored datasets are available for the explorer.")
+    initial_dataset = String(initial_dataset_key) in dataset_keys ? String(initial_dataset_key) : first(dataset_keys)
+    initial_sorts = score_sort_variables(score_df, initial_dataset)
+    initial_sort = String(initial_sort_variable) in initial_sorts ? String(initial_sort_variable) : first(initial_sorts)
+    initial_positions = load_dataset_positions(initial_dataset)
+    initial_channels = String.(initial_positions.channel_name)
+    initial_channel_idx = findfirst(==(String(initial_channel)), initial_channels)
+    if initial_channel_idx === nothing
+        initial_channel = initial_channel_name(score_df, initial_dataset, initial_sort)
+        initial_channel_idx = findfirst(==(String(initial_channel)), initial_channels)
+    end
+    initial_channel_idx === nothing && (initial_channel_idx = 1)
+
+    selected_dataset = Observable(initial_dataset)
+    selected_sort = Observable(initial_sort)
+    selected_index = Observable(Int(initial_channel_idx))
+    positions_obs = lift(ds -> load_dataset_positions(ds), selected_dataset)
+    selected_channel = lift(selected_dataset, selected_index) do ds, idx
+        channels = String.(load_dataset_positions(ds).channel_name)
+        isempty(channels) && return ""
+        return channels[clamp(Int(idx), 1, length(channels))]
+    end
+
+    function current_channel_names()
+        return String.(load_dataset_positions(selected_dataset[]).channel_name)
+    end
+
+    function set_selected_index!(idx)
+        channels = current_channel_names()
+        isempty(channels) && return nothing
+        idx isa Integer || return nothing
+        next_idx = clamp(Int(idx), 1, length(channels))
+        selected_index[] = next_idx
+        try
+            channel_menu.i_selected[] = next_idx
+        catch
+            channel_menu.selection[] = channels[next_idx]
+        end
+        return nothing
+    end
+
+    function scores_for_dataset_sort(dataset_key, sort_variable)
+        pos = score_positions(score_df, dataset_key, sort_variable)
+        return Float32.(pos.score_class)
+    end
+
+    function label_for_channel(dataset_key, sort_variable, channel_name)
+        row = score_row(score_df, dataset_key, sort_variable, channel_name)
+        row === nothing && return "unlabelled"
+        return cellstr(row.true_erp_class)
+    end
+
+    function score_for_channel(dataset_key, sort_variable, channel_name)
+        row = score_row(score_df, dataset_key, sort_variable, channel_name)
+        row === nothing && return NaN
+        return Float64(row.score_class)
+    end
+
+    function valid_sort_for_dataset(dataset_key, sort_variable)
+        sort_options = score_sort_variables(score_df, dataset_key)
+        isempty(sort_options) && error("No scored sort variables for $(dataset_key).")
+        candidate = String(sort_variable)
+        return candidate in sort_options ? candidate : first(sort_options)
+    end
+
+    valid_selected_sort = lift(selected_dataset, selected_sort) do ds, sv
+        valid_sort_for_dataset(ds, sv)
+    end
+
+    score_values = lift(selected_dataset, valid_selected_sort) do ds, sv
+        scores_for_dataset_sort(ds, sv)
+    end
+    score_range = (0.0f0, 1.0f0)
+    pos_x = lift(p -> Float64.(p.x), positions_obs)
+    pos_y = lift(p -> Float64.(p.y), positions_obs)
+    channel_labels = lift(p -> String.(p.channel_name), positions_obs)
+    selected_title = lift(selected_dataset, valid_selected_sort, selected_channel) do ds, sv, ch
+        @sprintf("%s | %s | %s | parent score %.3f | manual %s", ds, ch, sv, score_for_channel(ds, sv, ch), label_for_channel(ds, sv, ch))
+    end
+
+    use_fixed_interactive_detail = !use_original_erp_images || length(dataset_keys) > 1
+    detail_obs = lift(selected_dataset, valid_selected_sort, selected_channel) do ds, sv, ch
+        if use_fixed_interactive_detail
+            dataset_detail_interactive(
+                ds,
+                sv,
+                ch;
+                max_trials = interactive_max_trials,
+                max_timepoints = interactive_max_timepoints,
+            )
+        else
+            dataset_detail(ds, sv, ch)
+        end
+    end
+    visual_obs = lift(d -> erp_image_color_stats(d.image), detail_obs)
+    time_obs = lift(d -> d.times, detail_obs)
+    trial_obs = lift(d -> d.trials, detail_obs)
+    image_obs = lift(v -> v.image, visual_obs)
+    image_colorrange_obs = lift(v -> v.colorrange, visual_obs)
+    image_ticks_obs = lift(v -> v.ticks, visual_obs)
+    image_colormap_obs = lift(v -> v.colormap, visual_obs)
+    mean_obs = lift(d -> d.mean_wave, detail_obs)
+    sort_curve_obs = lift(d -> first(numeric_sort_values(d.sort_values)), detail_obs)
+    sort_xlabel_obs = lift(valid_selected_sort, detail_obs) do sv, d
+        _, suffix = numeric_sort_values(d.sort_values)
+        isempty(suffix) ? String(sv) : "$(sv) ($(suffix))"
+    end
+
+    if use_original_erp_images && length(dataset_keys) > 1
+        @info "Using fixed-size interactive ERP images because multiple datasets have different trial/time dimensions."
+    end
+
+    fig = Figure(size = (1760, 1040), figure_padding = (78, 30, 35, 25), backgroundcolor = :white)
+    Label(fig[1, 1:4], selected_title; fontsize = 28, tellwidth = false)
+
+    dataset_menu = Menu(fig[2, 1], options = dataset_keys, default = initial_dataset)
+    sort_menu = Menu(fig[3, 1], options = initial_sorts, default = initial_sort)
+    channel_menu = Menu(fig[4, 1], options = initial_channels, default = initial_channels[initial_channel_idx])
+
+    function option_at(options, idx)
+        idx isa Integer || return nothing
+        isempty(options) && return nothing
+        return options[clamp(Int(idx), 1, length(options))]
+    end
+
+    function apply_dataset_selection!(dataset_key::AbstractString)
+        sort_options = score_sort_variables(score_df, dataset_key)
+        isempty(sort_options) && return nothing
+
+        channels = String.(load_dataset_positions(dataset_key).channel_name)
+        next_sort = first(sort_options)
+        next_channel = initial_channel_name(score_df, dataset_key, next_sort)
+        next_idx = findfirst(==(next_channel), channels)
+        next_idx === nothing && (next_idx = 1)
+
+        sort_menu.options[] = sort_options
+        channel_menu.options[] = channels
+
+        selected_dataset[] = String(dataset_key)
+        selected_sort[] = next_sort
+        selected_index[] = Int(next_idx)
+
+        sort_menu.i_selected[] = 1
+        sort_menu.selection[] = next_sort
+        channel_menu.i_selected[] = Int(next_idx)
+        channel_menu.selection[] = channels[Int(next_idx)]
+        return nothing
+    end
+
+    function apply_sort_selection!(sort_variable)
+        sort_options = score_sort_variables(score_df, selected_dataset[])
+        sort_variable = String(sort_variable)
+        sort_variable in sort_options || return nothing
+        selected_sort[] = sort_variable
+
+        channels = current_channel_names()
+        if !isempty(channels)
+            current_channel = selected_channel[]
+            idx = findfirst(==(current_channel), channels)
+            idx === nothing && (idx = 1)
+            set_selected_index!(idx)
+        end
+        return nothing
+    end
+
+    function apply_channel_selection!(channel_name)
+        channels = current_channel_names()
+        idx = findfirst(==(String(channel_name)), channels)
+        idx === nothing && return nothing
+        selected_index[] = idx
+        return nothing
+    end
+
+    on(dataset_menu.selection) do ds
+        apply_dataset_selection!(String(ds))
+    end
+    on(dataset_menu.i_selected) do idx
+        dataset_key = option_at(dataset_keys, idx)
+        dataset_key === nothing && return nothing
+        apply_dataset_selection!(dataset_key)
+    end
+
+    on(sort_menu.selection) do sv
+        apply_sort_selection!(sv)
+    end
+    on(sort_menu.i_selected) do idx
+        sort_variable = option_at(score_sort_variables(score_df, selected_dataset[]), idx)
+        sort_variable === nothing && return nothing
+        apply_sort_selection!(sort_variable)
+    end
+
+    on(channel_menu.selection) do ch
+        apply_channel_selection!(ch)
+    end
+    on(channel_menu.i_selected) do idx
+        channel_name = option_at(current_channel_names(), idx)
+        channel_name === nothing && return nothing
+        apply_channel_selection!(channel_name)
+    end
+
+    ax_topo = Axis(
+        fig[5:8, 1];
+        title = "Click a channel",
+        titlesize = 24,
+        aspect = DataAspect(),
+        backgroundcolor = :white,
+    )
+    hidedecorations!(ax_topo)
+    hidespines!(ax_topo)
+    xlims!(ax_topo, -0.18, 1.18)
+    ylims!(ax_topo, -0.10, 1.16)
+    draw_head_outline!(ax_topo)
+
+    topo_scatter = scatter!(
+        ax_topo,
+        pos_x,
+        pos_y;
+        color = score_values,
+        colormap = :viridis,
+        colorrange = score_range,
+        markersize = 20,
+        strokewidth = 0.6,
+        strokecolor = :gray15,
+        inspectable = false,
+    )
+    text!(
+        ax_topo,
+        pos_x,
+        pos_y;
+        text = channel_labels,
+        align = (:center, :center),
+        fontsize = 8,
+        color = :white,
+        inspectable = false,
+    )
+    Colorbar(fig[9, 1], topo_scatter; label = "mean class probability", vertical = false, colorrange = (0.0, 1.0))
+
+    on(events(ax_topo.scene).mousebutton, priority = 20) do event
+        if event.button == Mouse.left && event.action == Mouse.press && is_mouseinside(ax_topo.scene)
+            positions = load_dataset_positions(selected_dataset[])
+            idx = closest_channel_index(mouseposition(ax_topo.scene), positions)
+            set_selected_index!(idx)
+            return Consume(true)
+        end
+        return Consume(false)
+    end
+
+    ax_img = Axis(
+        fig[2:8, 2];
+        xlabel = "time after onset (s)",
+        ylabel = "sorted trials",
+        backgroundcolor = :white,
+    )
+    hm_img = heatmap!(
+        ax_img,
+        time_obs,
+        trial_obs,
+        lift(img -> permutedims(img, (2, 1)), image_obs);
+        colormap = image_colormap_obs,
+        colorrange = image_colorrange_obs,
+        inspectable = false,
+    )
+    Colorbar(fig[2:8, 3], hm_img; label = "z-scored voltage", ticks = image_ticks_obs, width = 18)
+
+    ax_sort = Axis(fig[2:8, 4]; xlabel = sort_xlabel_obs, ylabel = "sorted trials", backgroundcolor = :white)
+    lines!(ax_sort, sort_curve_obs, trial_obs; color = :gray20, linewidth = 2, inspectable = false)
+
+    ax_mean = Axis(fig[9, 2]; xlabel = "time after onset (s)", ylabel = "mean ERP", backgroundcolor = :white)
+    lines!(ax_mean, time_obs, mean_obs; color = :black, linewidth = 2.5, inspectable = false)
+    linkxaxes!(ax_img, ax_mean)
+
+    on(detail_obs) do _
+        autolimits!(ax_img)
+        autolimits!(ax_sort)
+        autolimits!(ax_mean)
+    end
+
+    colsize!(fig.layout, 1, 500)
+    colsize!(fig.layout, 2, 560)
+    colsize!(fig.layout, 3, 34)
+    colsize!(fig.layout, 4, 500)
+    rowsize!(fig.layout, 9, 125)
+    colgap!(fig.layout, 18)
+    rowgap!(fig.layout, 10)
+    return fig
+end
+
 function interactive_reference_explorer(score_df::DataFrame, augmentation_score_df::DataFrame;
         sort_variables::Vector{String} = reference_sort_variables,
         initial_sort_variable::AbstractString = first(sort_variables),
@@ -1639,7 +2350,7 @@ function interactive_reference_explorer(score_df::DataFrame, augmentation_score_
         initialize_page::Bool = true)
 
     initialize_page && WGLMakie.Page(offline = false, exportable = false)
-    WGLMakie.activate!(; use_html_widgets = true)
+    WGLMakie.activate!(; use_html_widgets = false)
     positions = load_reference_positions()
     channel_names = String.(positions.channel_name)
     initial_channel_idx = findfirst(==(String(initial_channel)), channel_names)
@@ -1653,7 +2364,11 @@ function interactive_reference_explorer(score_df::DataFrame, augmentation_score_
         idx isa Integer || return nothing
         1 <= Int(idx) <= nrow(positions) || return nothing
         selected_index[] = Int(idx)
-        channel_menu.selection[] = channel_names[Int(idx)]
+        try
+            channel_menu.i_selected[] = Int(idx)
+        catch
+            channel_menu.selection[] = channel_names[Int(idx)]
+        end
         return nothing
     end
 
@@ -1675,10 +2390,7 @@ function interactive_reference_explorer(score_df::DataFrame, augmentation_score_
     end
 
     score_values = lift(sv -> scores_for_sort(sv), selected_sort)
-    score_range = lift(sv -> score_colorrange(scores_for_sort(sv); mode = :adaptive), selected_sort)
-    selected_x = lift(i -> [positions.x[i]], selected_index)
-    selected_y = lift(i -> [positions.y[i]], selected_index)
-    selected_label = lift(ch -> [String(ch)], selected_channel)
+    score_range = (0.0f0, 1.0f0)
     selected_title = lift(selected_sort, selected_channel) do sv, ch
         @sprintf("%s | %s | parent score %.3f | manual %s", ch, sv, score_for_channel(sv, ch), label_for_channel(sv, ch))
     end
@@ -1704,6 +2416,10 @@ function interactive_reference_explorer(score_df::DataFrame, augmentation_score_
     image_colormap_obs = lift(v -> v.colormap, visual_obs)
     mean_obs = lift(d -> d.mean_wave, detail_obs)
     sort_curve_obs = lift(d -> first(numeric_sort_values(d.sort_values)), detail_obs)
+    sort_xlabel_obs = lift(selected_sort, detail_obs) do sv, d
+        _, suffix = numeric_sort_values(d.sort_values)
+        isempty(suffix) ? String(sv) : "$(sv) ($(suffix))"
+    end
 
     fig = Figure(size = (1760, 1020), figure_padding = (78, 30, 35, 25), backgroundcolor = :white)
     Label(fig[1, 1:4], selected_title; fontsize = 28, tellwidth = false)
@@ -1743,36 +2459,7 @@ function interactive_reference_explorer(score_df::DataFrame, augmentation_score_
         strokecolor = :gray15,
         inspectable = false,
     )
-    scatter!(
-        ax_topo,
-        positions.x,
-        positions.y;
-        color = RGBAf(0, 0, 0, 0),
-        markersize = 34,
-        strokewidth = 0,
-        inspectable = false,
-    )
-    scatter!(
-        ax_topo,
-        selected_x,
-        selected_y;
-        color = RGBAf(0, 0, 0, 0),
-        markersize = 44,
-        strokewidth = 4,
-        strokecolor = :black,
-        inspectable = false,
-    )
-    text!(
-        ax_topo,
-        selected_x,
-        selected_y;
-        text = selected_label,
-        align = (:center, :center),
-        fontsize = 11,
-        color = :white,
-        inspectable = false,
-    )
-    Colorbar(fig[9, 1], topo_scatter; label = "mean class probability", vertical = false)
+    Colorbar(fig[9, 1], topo_scatter; label = "mean class probability", vertical = false, colorrange = (0.0, 1.0))
 
     on(events(ax_topo.scene).mousebutton, priority = 20) do event
         if event.button == Mouse.left && event.action == Mouse.press && is_mouseinside(ax_topo.scene)
@@ -1800,7 +2487,7 @@ function interactive_reference_explorer(score_df::DataFrame, augmentation_score_
     )
     Colorbar(fig[2:8, 3], hm_img; label = "z-scored voltage", ticks = image_ticks_obs, width = 18)
 
-    ax_sort = Axis(fig[2:8, 4]; xlabel = "sort value", ylabel = "sorted trials", backgroundcolor = :white)
+    ax_sort = Axis(fig[2:8, 4]; xlabel = sort_xlabel_obs, ylabel = "sorted trials", backgroundcolor = :white)
     lines!(ax_sort, sort_curve_obs, trial_obs; color = :gray20, linewidth = 2, inspectable = false)
 
     ax_mean = Axis(fig[9, 2]; xlabel = "time after onset (s)", ylabel = "mean ERP", backgroundcolor = :white)
@@ -1858,6 +2545,65 @@ function open_url_in_browser(url::AbstractString)
     return false
 end
 
+function start_browser_dataset_explorer(score_df::DataFrame, augmentation_score_df::DataFrame;
+        dataset_keys::Vector{String} = score_dataset_keys(score_df),
+        initial_dataset_key::AbstractString = initial_dataset_key(score_df),
+        initial_sort_variable::AbstractString = initial_sort_variable(score_df, initial_dataset_key),
+        initial_channel::AbstractString = initial_channel_name(score_df, initial_dataset_key, initial_sort_variable),
+        use_original_erp_images::Bool = true,
+        interactive_max_trials::Int = 700,
+        interactive_max_timepoints::Int = 520,
+        host::AbstractString = "127.0.0.1",
+        port::Integer = 9384,
+        open_browser::Bool = true)
+
+    B = WGLMakie.Bonito
+    stop_browser_reference_explorer!()
+    WGLMakie.activate!(; use_html_widgets = false)
+
+    app = B.App(title = "ERPgnostics ResNet18 Explorer") do _session
+        fig = interactive_dataset_explorer(
+            score_df,
+            augmentation_score_df;
+            dataset_keys = dataset_keys,
+            initial_dataset_key = initial_dataset_key,
+            initial_sort_variable = initial_sort_variable,
+            initial_channel = initial_channel,
+            use_original_erp_images = use_original_erp_images,
+            interactive_max_trials = interactive_max_trials,
+            interactive_max_timepoints = interactive_max_timepoints,
+            initialize_page = false,
+        )
+        return B.DOM.div(
+            fig;
+            style = B.Styles(
+                "padding-left" => "42px",
+                "padding-top" => "10px",
+                "padding-bottom" => "24px",
+                "background" => "white",
+                "box-sizing" => "border-box",
+                "overflow-x" => "auto",
+                "width" => "max-content",
+            ),
+        )
+    end
+
+    server = B.Server(app, String(host), Int(port); verbose = -1)
+    ERP_BROWSER_SERVER[] = server
+    url = "http://$(host):$(server.port)/"
+
+    if open_browser
+        opened = open_url_in_browser(url)
+        opened || @warn "Could not open browser automatically. Open this URL manually: $(url)"
+    end
+
+    return (
+        url = url,
+        server = server,
+        message = "Open $(url) while this Julia kernel is running. Run stop_browser_reference_explorer!() to stop the server.",
+    )
+end
+
 function start_browser_reference_explorer(score_df::DataFrame, augmentation_score_df::DataFrame;
         sort_variables::Vector{String} = reference_sort_variables,
         initial_sort_variable::AbstractString = first(sort_variables),
@@ -1871,7 +2617,7 @@ function start_browser_reference_explorer(score_df::DataFrame, augmentation_scor
 
     B = WGLMakie.Bonito
     stop_browser_reference_explorer!()
-    WGLMakie.activate!(; use_html_widgets = true)
+    WGLMakie.activate!(; use_html_widgets = false)
 
     app = B.App(title = "ERPgnostics ResNet18 Explorer") do _session
         fig = interactive_reference_explorer(
