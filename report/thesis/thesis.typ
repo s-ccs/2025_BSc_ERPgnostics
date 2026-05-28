@@ -865,7 +865,7 @@ E1 runs the simulator parameter search at 16x16 input ERP image resolution, with
 === Experiment E2 Sim-to-sim training-set fit <exp:simfit>
 E2 reuses the best Latin-hypercube candidate from E1 at 16x16 with Gaussian smoothing and additionally evaluates the trained dense network on its own simulated training set. The purpose of the experiment is to measure the gap between synthetic validation and real-data evaluation for the same calibrated configuration. 
 
-A separate preprocessing-pipeline variant is run alongside E2 to probe how robust the calibration is to small changes in the image pipeline. In that variant z-scoring is applied after downscaling instead of before, and the smoothing kernel is altered.
+A separate preprocessing-pipeline variant is run alongside E2 to probe how robust the calibration is to small changes in the image pipeline. In that variant z-scoring is applied after downscaling instead of before, and the smoothing kernel is altered for the simulated ERP images only.
 
 === Experiment E3 Simulator-first downstream model comparison <exp:simrank>
 E3 is the only experiment that holds the simulator fixed and varies the downstream classifier instead. It grid-searches three downstream models, namely a dense neural network, a random forest, and a support-vector machine, across the three sampling strategies and four input resolutions of 2x2, 4x4, 8x8, and 16x16. The goal is simply to see how other machine-learning models perform on the simulator-trained signal.
@@ -893,20 +893,17 @@ All simulations, model training, and evaluation ran in this thesis were executed
 // ----------------------------------------------------------------------------
 #pagebreak()
 = Results <chp:results>
-TODO alle cnn modelle in der lage waren zu unterschieden ob ein hoch auflösendes erp image runter skaliert wurde oder ob ein nidrig auflösendes erp image runter skaliert wurde
+Results are split into two parts. The first part reports the simulator-side experiments E1–E5 from @sec:experiments-setups, which calibrate the simulator and probe how far a simulator-trained model carries over to real ERP images. The second part reports E6, which compares classifier capacities on the labelled real-data pool.
+
 == Data Simulation and Calibration Results
-This section reports the four simulation experiments E1–E4 defined in @sec:experiments-setups, plus a general observation that applies across them. Each experiment is referenced by its identifier so that the setup details are not repeated here.
+This section reports the simulator-side experiments.
 
 === General observations from the simulation experiments
-The best classifier setting across simulation experiments uses sorting, per-time-point z-scoring, Gaussian smoothing, and a final resize. A perfect or near-perfect fit on the simulated training set was observed frequently across the evaluated setups and was therefore not pursued further as a separate result. None of the models trained at the smaller image sizes of 8x8, 4x4, and 2x2 reached the performance of the best 16x16 run.
+The best ERP image processing pipeline setting across simulation experiments uses sorting, per-time-point z-scoring, Gaussian smoothing, and a final resize. A perfect or near-perfect fit on the simulated training set was observed frequently across the evaluated setups and was therefore not pursued further. 
 
 === Results of E1 (16x16 dense-network parameter search)
-@tab:simulation-parameter-search-results presents the best run per search method and resolution. The Latin hypercube and Monte Carlo strategies both reach a top BAcc of 0.711 at 16x16, ahead of broad random search at 0.692 and the starting parameters at 0.674. At the smaller resolutions performance drops monotonically with size.
+@tab:simulation-parameter-search-results presents the best run per search method and resolution, validated against the Reference Fixations dataset. With smoothing deactivated for both the simulated and the real ERP images, the best 16x16 dense-network row drops from BAcc 0.711 to 0.42.
 
-// Sources:
-// - notebooks/week_15/dense_nn_lowpass_direct_search.ipynb
-// - notebooks/week_15/simulation_small_sclae.ipynb
-// - /home/benjamin/Dokumente/presentations/pdfs/midterm_talk_v3-1776681517355.pdf, pages 15, 22
 #[
   #show figure: set block(breakable: false)
   #set text(size: 8pt)
@@ -969,16 +966,16 @@ The best classifier setting across simulation experiments uses sorting, per-time
       [0.612],
       [0.407],
     ),
-    caption: [Best Dense-NN run per search method and resolution from 72 screening combinations.],
+    caption: [Best Dense-NN run per search method and resolution. At 16x16 all four configurations are listed. For the smaller resolutions of 8x8, 4x4, and 2x2 only the single best run across search methods is shown],
   ) <tab:simulation-parameter-search-results>
 ]
 
-With smoothing deactivated for both the simulated and the real ERP images, the best 16x16 dense-network row drops from BAcc 0.711 to 0.42. Two further search strategies described in the methods chapter do not contribute a separate row to @tab:simulation-parameter-search-results. As part of the heterogeneity-scaling family, a simpler variant that only increased the standard deviations of the normally distributed parameters was discarded after visual inspection. The resulting ERP images and their visible patterns differed strongly from the real labelled images, so this variant was not investigated further.
+Two further search strategies described in the methods chapter do not contribute a separate row to @tab:simulation-parameter-search-results. As part of the heterogeneity-scaling family, a simpler variant that only increased the standard deviations of the normally distributed parameters was discarded after visual inspection. The resulting ERP images and their visible patterns differed strongly from the real labelled images, so this variant was not investigated further.
 
-The two-zone mixture was tested in an early prototype together with all of the other parameter-finding strategies under the altered preprocessing pipeline described as part of E2 in @exp:simfit. Every evaluated strategy, including the two-zone mixture itself, collapsed to a balanced accuracy of 0.5 or lower under that altered pipeline. The failure is therefore not specific to the two-zone mixture and confirms empirically that minor pipeline adjustments can produce large changes in classification outcomes.
+The two-zone mixture was tested in an early prototype together with all of the other parameter-finding strategies under the altered preprocessing pipeline described as part of E2 in @exp:simfit. Every evaluated strategy, including the two-zone mixture itself, collapsed to a balanced accuracy of 0.5 or lower under that altered pipeline. The failure is therefore not specific to the two-zone mixture and confirms empirically that pipeline adjustments can produce large changes in classification outcomes.
 
 === Results of E2 (sim-to-sim training-set fit)
-@tab:simulation-calibration-results shows the same Latin-hypercube-calibrated dense network from E1 evaluated on its own simulated training set and on the real labelled fixation data. The simulated training set is fit perfectly with BAcc and macro-F1 at 1.000, while the real-data BAcc is 0.711 with a per-repeat standard deviation of 0.050. The perfect score on the training set only confirms that the network overfits the data it was trained on. A perfect training score combined with a much lower score on real labels is consistent with the dense network overfitting to features of the simulated images that do not transfer to real ERP images.
+The Latin hypercube row from E1 holds the best simulator parameters found in that search, and these parameters are reused here to generate the ERP images on which the dense network is trained. @tab:simulation-calibration-results presents the NN performance on additional simulated training set and on the reference fixation dataset.
 
 #[
   #show figure: set block(breakable: false)
@@ -1019,7 +1016,7 @@ The two-zone mixture was tested in an early prototype together with all of the o
 ]
 
 === Results of E3 (simulator-first downstream model comparison)
-@tab:simulation-model-comparison-results shows the three top rows of the ranking from E3, all at 16x16 under Monte Carlo random search. The dense neural network is the strongest of the three downstream models, ahead of the random forest and the support-vector machine with radial basis kernel.
+@tab:simulation-model-comparison-results results are all at 16x16 under Monte Carlo random search. The dense neural network is the strongest of the three downstream models, ahead of the random forest and the support-vector machine with radial basis kernel. The absolute scores in this table are lower than in the other simulation experiments because E3 was run as an early experiment, before the simulation setup was extended to its final form.
 
 #[
   #show figure: set block(breakable: false)
@@ -1055,7 +1052,7 @@ The two-zone mixture was tested in an early prototype together with all of the o
       [0.642],
       [0.502],
 
-      [Support-vector machine with radial basis kernel],
+      [Support-vector machine],
       [0.641],
       [0.500],
     ),
@@ -1064,7 +1061,7 @@ The two-zone mixture was tested in an early prototype together with all of the o
 ]
 
 === Results of E4 (64x64 ResNet18 parameter search)
-@tab:simulation-resnet18-64-results shows the starting parameters and the best candidate from each search method. Broad random search reaches the highest BAcc of 0.926 at candidate 10 of 12, followed by Latin hypercube at 0.916 at candidate 21 of 48, and Monte Carlo at 0.904 at candidate 38 of 48. The starting-parameter row is at 0.886. All three strategies clearly improve over the starting parameters at this resolution.
+@tab:simulation-resnet18-64-results shows the hand-crafted starting parameters and the best candidate from each search method. All three strategies clearly improve over the starting parameters at this resolution.
 
 // Sources:
 // - notebooks/data_generation/outputs/strategy_64x64_resnet18/posthoc_exports/baseline_summary.csv
@@ -1121,7 +1118,7 @@ The two-zone mixture was tested in an early prototype together with all of the o
   ) <tab:simulation-resnet18-64-results>
 ]
 
-The Best at iteration column shows that no later candidate of the same strategy reached a higher BAcc. For Latin hypercube the remaining 27 of 48 candidates therefore yield no further improvement. For broad random with 10 of 12 and Monte Carlo with 38 of 48 the best result lies close to the end of the budget, which suggests that more iterations could still have improved the result.
+The Best at iteration column shows that no later candidate of the same strategy reached a higher BAcc. For Latin hypercube the remaining 27 of 48 candidates therefore yield no further improvement.
 
 @tab:simulation-resnet18-64-timing reports the wall-time of E4 split into the three logged stages. Almost the entire runtime is spent generating the synthetic ERP images, while ResNet18 training and inference together add up to less than 15 minutes across all 325 repeats.
 
@@ -1169,7 +1166,7 @@ The Best at iteration column shows that no later candidate of the same strategy 
   ) <tab:simulation-resnet18-64-timing>
 ]
 
-The separate profiling run mentioned for E4 in @sec:experiments-setups shows that about 84 percent of the per-image cost comes from the raw ERP simulation itself, while only about 16 percent is spent on the subsequent image-processing steps.
+Earlier simulation experiments showed that about 84 percent of the per-image time cost comes from the ERP simulation itself, while only about 16 percent is spent on the subsequent image-processing steps.
 
 === Results of E5 (cross-source sim-to-real transfer)
 
@@ -1377,6 +1374,8 @@ The per-fold training times of the shallow CNN baselines stay within a few secon
   ) <tab:real-data-classification-results>
 ]
 
+== Further Findings
+A side observation across the simulation experiments is that every evaluated CNN was able to tell apart ERP images that were generated at high resolution and then downscaled from ERP images that were generated at low resolution directly. The two image types are visually similar after the resize, but the models consistently separated them, which suggests that the downscaling step leaves a detectable signature in the image statistics.
 
 // ----------------------------------------------------------------------------
 // Chapter 5 - Interpret the findings, state limitations honestly, and derive
