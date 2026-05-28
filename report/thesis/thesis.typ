@@ -720,7 +720,7 @@ The experiments in @sec:experiments-setups add, remove, or vary individual steps
   caption: [Basic preprocessing pipeline applied to one real ERP image from the fixations dataset, channel ch096, sorted by duration. (1) Raw trial-by-time matrix. (2) Trials sorted in ascending duration order. (3) Per-time-point z-scoring. (4) Additional Gaussian smoothing.],
 ) <fig:basic-preprocessing-pipeline>
 
-== Real-to-Real Data Augmentation
+== Real-to-Real Data Augmentation <sec:real-to-real-augmentation>
 This section introduces trial slicing, a data augmentation strategy developed for this thesis. The labelled real-data pool is limited and the trial counts vary widely across sources, so trial slicing turns one parent ERP image into several smaller ones of fixed shape. This expands the labelled pool without recording new EEG data or producing additional labels, and it equalises the trial dimension across sources.
 
 Trial slicing operates on an already sorted ERP image of shape $(N, T)$, where $N$ is the number of trials and $T$ is the number of time samples. It cuts the image horizontally along the trial axis into smaller ERP images of fixed target trial count $n$. Let
@@ -742,7 +742,7 @@ Each sliced ERP image is then expanded into four augmented variants before the r
 This expansion makes the classifier more robust in two ways. The reversed trial order forces the CNN model to recognise the pattern from either reading direction along the sort axis. The polarity inversion removes the dependency on the absolute sign of the EEG signal, which can differ between recording references and between datasets. As a side effect, quadrupling the labelled examples per slice acts as a regulariser and supports generalisation across the heterogeneous data sources used in this thesis.
 
 The slicing step is applied asymmetrically to class and no class instances in order to counter the strong imbalance in the labelled pool, where no class clearly dominates over class. For a class instance, all $K + 1$ slices are kept and each receives the four augmentation variants, yielding $4 (K + 1)$ training images per parent recording. For a no class instance, only one slice per parent recording is kept, with the four augmentation variants, so that one no class parent contributes only 4 training images. This rule lifts the class training count by a factor of $K + 1$ while leaving the no class count unchanged, which brings the two training counts closer to balance and reduces the pull of the majority no class.
-We chose $n = 200$ as the target trial count, as a common denominator across all labelled data sources. 
+We chose $n = 200$ as the target trial count, as a small common denominator across all labelled data sources. A second reason is class balance. Together with the asymmetric slicing, this lifts the minority class share enough to bring the augmented pool close to an even split, as @tab:augmentation-trial-balance and @tab:manual-label-pool-results show.
 
 #[
   #show figure: set block(breakable: false)
@@ -836,6 +836,42 @@ We chose $n = 200$ as the target trial count, as a common denominator across all
   ) <tab:augmentation-trial-balance>
 ]
 
+// Sources:
+// - notebooks/week_21/labelstudio_annotations_all.csv (manual annotation counts per erp_class)
+// - notebooks/week_23/outputs/augmentation_inverse_sort_polarity/augmented_label_summary.csv (final augmented counts incl. 4 variants)
+// - notebooks/week_23/outputs/augmentation_inverse_sort_polarity/run_config.json (n_augmented_images 18596, n_base_mod_images 4649, target_trials 200)
+#[
+  #show figure: set block(breakable: true)
+  #set text(size: 8pt)
+  #set par(justify: false)
+
+  #figure(
+    align(center, table(
+      columns: (36mm, 28mm, 32mm),
+      inset: (x: 4pt, y: 3pt),
+      stroke: (x: none, y: 0.45pt + luma(190)),
+      fill: (_, y) => if y == 0 { rgb("#f3f5f7") },
+      align: (x, y) => if y == 0 { center + horizon } else if x == 0 { left + top } else { center + top },
+      table.header(
+        [Label],
+        [Manually found],
+        [Augmented images],
+      ),
+
+      [sigmoid], [116], [4,268],
+      [diverging bar], [53], [1,632],
+      [one-sided fan], [49], [392],
+      [tilted bar], [37], [1,228],
+      [hourglass], [33], [548],
+      [two-sided fan], [6], [228],
+      [All six patterns], [294], [8,296],
+      [no class], [2,575], [10,300],
+      [Total], [2,869], [18,596],
+    )),
+    caption: [Manual label pool by pattern. The Manually found column counts the manual labels for each pattern. The Augmented images column counts the final training images after trial slicing with $n = 200$ and the reference, inverse-sort, inverse-polarity, and combined variants per slice.],
+  ) <tab:manual-label-pool-results>
+]
+
 @fig:trial-slicing-augmentation visualises the combined slicing and augmentation step on the same fixations recording used in @fig:basic-preprocessing-pipeline. The parent image enters this step as a sorted ERP image only, without z-scoring or Gaussian smoothing. Those two steps are applied separately to every augmented child image, so each child carries its own per-time-point z-scoring and its own smoothing. The visualisation slices the parent into four equal parts, which is for demonstration purpose. To save space, the individual colorbars are omitted and one shared colorbar is used for all panels in this plot. 
 
 
@@ -879,10 +915,29 @@ E5 tests whether a ResNet18 trained on the best simulator parameters from E4 gen
 === Experiment E6 Shallow-CNN versus ResNet baseline <exp:depth>
 E6 compares three shallower CNN baselines with 1, 3, and 10 convolutional layers against the pretrained ResNet18 under the same five-fold cross-validation on the labelled ERP image pool. The motivation is whether smaller models could save training time without losing accuracy. ResNet34 is included as an additional comparison point.
 
+=== Experiment E7 Image pipeline and processing-step choices <exp:preprocessing-sweep>
+E7 varies single steps of the ERP image pipeline, validated on the reference fixations dataset only, and measures how each change affects both the visible image and the classification score. The qualitative part compares the resize interpolation function across nearest, linear, quadratic, cubic, and Lanczos sampling, the pipeline with and without Gaussian smoothing, per-time-point z-scoring before versus after the resize, and amplitude binning from 2 up to 32 discrete levels against the continuous colorbar. The quantitative part trains the 1-, 3-, and 10-layer CNNs and the pretrained and random initialised ResNet18 from @exp:depth at 64x64 under five-fold cross-validation and compares the reference pipeline with three added steps, namely per-image clipping at the 1st and 99th amplitude percentile, per-image scaling to a fixed range from -1 to 1, and class balancing to a 50/50 split by dropping no class instances.
+
+=== Experiment E8 Noise reduction and morphological filtering <exp:filters>
+E8 adds an image filter to the pipeline, validated on the reference fixations dataset only, and asks two questions. 
+First, it screens 40 image filters, most of them from the JuliaImages image-processing packages @JuliaImages, to find which noise-reduction or morphological filter helps most to improve model performance, covering morphological operations and edge filters. In this screen the filtered image forms a second input channel next to the standard ERP image channel, with the filter applied after z-scoring and before the Gaussian low-pass, so the model sees the unfiltered and the filtered image together.
+
+Second, it tests how the eight best performing morphological filters combine with Gaussian smoothing, comparing a Gaussian-only reference, Gaussian followed by the filter, the filter followed by Gaussian, and the filter without Gaussian. Both a pretrained and a randomly initialised ResNet18 are trained.
+
+=== Experiment E9 Image and ERP-specific augmentation with imbalance handling <exp:augmentation>
+E9 studies augmentation and class imbalance on the reference fixations dataset only. It first checks whether generic image augmentations such as rotations or croping keeps the ERP image label intact, then compares ERP-specific augmentations, namely trial dropout, pink-noise addition, time jitter, and a combination of these.
+
+As a separate branch, E9 tests three imbalance strategies without augmentation, each with a tuned decision threshold. Class-weighted cross-entropy raises the loss weight of the minority class, so misclassifying a pattern costs more than misclassifying a no class image. Focal loss adds a factor to the cross-entropy that shrinks the contribution of examples the model already predicts with high confidence, which are the no class images, so the remaining training signal comes from the rarer pattern cases. Balanced batches resample the data when each mini-batch is formed and draw the minority class more often, with repetition, so the model sees roughly as many class as no class images per update instead of mostly no class images. The classifier is a randomly initialised ResNet18 so the comparison reflects the augmentation rather than ImageNet pretraining.
+
+=== Experiment E10 Input resolution and model capacity <exp:resolution>
+E10 extends the capacity comparison of @exp:depth across the input resolution on the reference fixations dataset only. It trains the 1-, 3-, and 10-layer CNNs and the pretrained ResNet18 at resolutions from 16x16 up to 256x256 under five-fold cross-validation and logs the per-fold training time. The aim is to find the smallest resolution at which the higher-capacity models still separate the two classes and to expose the accuracy and runtime trade-off. The shallow CNNs run at every resolution, while ResNet18 and the 10-layer CNN start at 64x64 since of a minimum input size required.
+
 == Model evaluation
 To keep the comparison manageable, the evaluation uses two classification metrics, balanced accuracy and macro-F1, together with training and inference time. Balanced accuracy is robust to class imbalance, and macro-F1 weighs precision and recall equally across the two classes.
 
-All simulations, model training, and evaluation ran in this thesis were executed on a single PC with an AMD Ryzen 7 7800X3D 8-core CPU, 64 GB of system memory, and an NVIDIA GeForce RTX 4070 GPU with 12 GB of VRAM running Linux.
+We used Julia for all simulation, preprocessing, model training, and evaluation. Julia fits this role because it targets numerical and scientific computing while compiling programs to efficient native code @Bezanson2017Julia. The ResNet-based models run in Flux, the Julia machine-learning library used for the training code @Innes2018Flux. Metalhead provides the ResNet model family and the ImageNet-pretrained weights @MetalheadDocs2026.
+
+All simulations, model training, and evaluation in this thesis ran on a single PC with an AMD Ryzen 7 7800X3D 8-core CPU, 64 GB of system memory, and an NVIDIA GeForce RTX 4070 GPU with 12 GB of VRAM running Linux.
 
 
 
@@ -893,7 +948,7 @@ All simulations, model training, and evaluation ran in this thesis were executed
 // ----------------------------------------------------------------------------
 #pagebreak()
 = Results <chp:results>
-Results are split into two parts. The first part reports the simulator-side experiments E1–E5 from @sec:experiments-setups, which calibrate the simulator and probe how far a simulator-trained model carries over to real ERP images. The second part reports E6, which compares classifier capacities on the labelled real-data pool.
+Results are split into two parts. The first part reports the simulator-side experiments E1 to E5, which calibrate the simulator and probe how far a simulator-trained model carries over to real ERP images. The second part reports E6 to E10 on the real-data pool. The experiment numbers reflect the order of presentation, not the order in which we ran the experiments. E7 to E10 were early attempts that vary the preprocessing, filtering, augmentation, and input resolution on the reference fixations dataset only. E6 came last and is the final real-data experiment, where it compares classifier capacities on the full labelled pool.
 
 == Data Simulation and Calibration Results
 This section reports the simulator-side experiments.
@@ -1240,65 +1295,20 @@ Earlier simulation experiments showed that about 84 percent of the per-image tim
       [0.462],
       [collapsed],
     ),
-    caption: [Mean balanced accuracy of the four ResNet18 models from E5 across the simulated holdout split and five labelled real sources from @tab:real-data-sources. Each numeric cell is the mean over non-collapsed repeats. The collapse filter marks a repeat as collapsed when the less frequent predicted class accounts for less than 5 percent of predictions. A collapsed entry means that no repeat remained after this filter. The real fixations baseline is not evaluated on the simulated holdout split.],
+    caption: [Mean balanced accuracy of the four ResNet18 models from E5 across the simulated holdout split and five labelled real sources that contain sigmoid patterns. Each numeric cell is the mean over non-collapsed repeats. The collapse filter marks a repeat as collapsed when the less frequent predicted class accounts for less than 5 percent of predictions. The real fixations baseline is not evaluated on the simulated holdout split.],
   ) <tab:cross-source-sim-to-real-performance>
 ]
 
-The table supports H1.1b because simulated holdout BAcc exceeds real-source BAcc for both simulator-trained models with valid repeats. The Monte Carlo model collapses because all three repeats predict almost all examples as sigmoid on every validation source. The real-fixations baseline reaches almost perfect performance on the calibration source, but it does not carry equally well to the other real sources. E5 therefore shows that the simulator-trained models recognise the simulated sigmoid task, but the learned decision boundary does not transfer reliably to real ERP images.
-
 == Classification Performance on Real Data
-The supervised real-data experiments use the manually labelled ERP image pool. The class distribution is imbalanced, so balanced accuracy and macro-F1 remain the main comparison metrics.
-
-// Sources:
-// - notebooks/week_21/outputs/week21_labeling_summary/summary.json
-// - notebooks/week_23/outputs/augmentation_inverse_sort_polarity/run_config.json
-#[
-  #show figure: set block(breakable: true)
-  #set text(size: 8pt)
-  #set par(justify: false)
-
-  #figure(
-    table(
-      columns: (1.7fr, 0.75fr, 3.4fr),
-      inset: (x: 4pt, y: 3pt),
-      stroke: (x: none, y: 0.45pt + luma(190)),
-      fill: (_, y) => if y == 0 { rgb("#f3f5f7") },
-      align: (x, y) => if y == 0 { center + horizon } else if x == 1 { center + top } else { left + top },
-      table.header(
-        [Quantity],
-        [Value],
-        [Meaning],
-      ),
-
-      [Classified annotations],
-      [2,879],
-      [Manually classified ERP images],
-
-      [Pattern labels],
-      [294],
-      [Positive binary class],
-
-      [Datasets with patterns],
-      [10],
-      [Sources with at least one positive pattern label found],
-    ),
-    caption: [Additional metrics about the manual label pool.],
-  ) <tab:manual-label-pool-results>
-]
-
+This section reports how the classifiers perform on the manually labelled real data. The label pool that the experiments use is summarised in @tab:manual-label-pool-results .
 
 === Results of E6 (shallow-CNN versus ResNet baseline)
-The per-fold training times of the shallow CNN baselines stay within a few seconds of the pretrained ResNet18, a difference that is negligible for the project budget. The accuracy gap is much larger. The 1- and 3-layer CNNs often collapse to a single predicted class, the 10-layer CNN improves marginally, and the pretrained ResNet18 reaches the overall best performance on the same data. ResNet34 matches the ResNet18 accuracy with increased training time, so the deeper variant adds cost without accuracy and ResNet18 remains the chosen model.
+The per-fold training times of the shallow CNN baselines stay within a few seconds of the ResNet18, a difference that is negligible for the project budget. The accuracy gap is much larger. The 1- and 3-layer CNNs often collapse to a single predicted class, the 10-layer CNN improves marginally, and the pretrained ResNet18 reaches the overall best performance on the same data. ResNet34 matches the ResNet18 accuracy with increased training time, so the deeper variant adds cost without accuracy so the ResNet18 remains the chosen model. @tab:real-data-classification-results reports the full-pool results.
 
 // Sources:
 // - notebooks/week_21/outputs/resnet18_labeled_erp_cv/metrics_summary.csv
 // - notebooks/week_21/outputs/resnet34_labeled_erp_cv_128_resize/metrics_summary.csv
 // - notebooks/week_23/outputs/augmentation_inverse_sort_polarity/metrics_summary.csv
-// - notebooks/week_18/preprocessing_test.ipynb
-// - notebooks/week_18/outputs/data_augmentation_tests_ranked_summary.csv
-// - notebooks/week_18/outputs/semi_supervised_learing2_summary.csv
-// - /home/benjamin/Dokumente/presentations/pdfs/week_22.pdf, page 5
-// - /home/benjamin/Dokumente/presentations/pdfs/week_23.pdf, page 2
 #[
   #show figure: set block(breakable: false)
   #set text(size: 8pt)
@@ -1306,76 +1316,247 @@ The per-fold training times of the shallow CNN baselines stay within a few secon
 
   #figure(
     table(
-      columns: (1.35fr, 1.25fr, 1.35fr, 2.45fr, 0.65fr, 0.75fr),
+      columns: (1.3fr, 3.7fr, 0.7fr, 0.8fr),
       inset: (x: 4pt, y: 3pt),
       stroke: (x: none, y: 0.45pt + luma(190)),
       fill: (_, y) => if y == 0 { rgb("#f3f5f7") },
       align: (x, y) => {
         if y == 0 {
           center + horizon
-        } else if x == 4 or x == 5 {
+        } else if x == 2 or x == 3 {
           center + top
         } else {
           left + top
         }
       },
       table.header(
-        [Experiment],
         [Model],
-        [Training data],
         [Changed variables],
         [BAcc],
         [Macro-F1],
       ),
 
-      [Inverse sort and polarity augmentation],
       [ResNet18 pretrained],
-      [12 labelled data sources with augmentation],
-      [Trial sort direction, signal polarity, binary pattern task],
+      [Trial slicing and inverse sort and polarity augmentation],
       [0.918],
       [0.917],
 
-      [Preprocessing sweep],
       [ResNet18 pretrained],
-      [fixations dataset only],
-      [Gaussian smoothing, Dilation filter, high 100 smoothing],
-      [0.907],
-      [0.903],
-
-      [Trial-dropout augmentation],
-      [ResNet18 random initialisation],
-      [fixations dataset only],
-      [Trial dropout, threshold tuning, class-aware augmentation],
-      [0.902],
-      [0.880],
-
-      [Labelled ResNet18 baseline],
-      [ResNet18 pretrained],
-      [12 labelled data sources],
-      [No inverse sort or polarity augmentation, binary pattern task],
+      [Only trial slicing, no inverse sort or polarity augmentation],
       [0.866],
       [0.866],
 
-      [Labelled ResNet34 comparison],
       [ResNet34 pretrained],
-      [12 labelled data sources],
-      [Backbone depth, resize to 128x128, binary pattern task],
+      [increased model size and ERP image size to 128x128],
       [0.854],
       [0.854],
-
-      [Pseudo-label semi-supervised training],
-      [ResNet18 SSL fine-tune and student stage],
-      [fixations dataset with same-dataset trial-sliced SSL pool],
-      [SSL fine-tuning, confidence threshold 0.9 pseudo-labels],
-      [0.837],
-      [0.849],
     ),
-    caption: [Real-data classification results by training data, model, and changed training variables.],
+    caption: [Classification results from E6 on the full labelled pool, comparing the ResNet18, the deeper ResNet34, and the inverse-sort and polarity augmentation. All runs use the same labelled pool.],
   ) <tab:real-data-classification-results>
 ]
 
-== Further Findings
-A side observation across the simulation experiments is that every evaluated CNN was able to tell apart ERP images that were generated at high resolution and then downscaled from ERP images that were generated at low resolution directly. The two image types are visually similar after the resize, but the models consistently separated them, which suggests that the downscaling step leaves a detectable signature in the image statistics.
+=== Results of E7 (image pipeline and processing-step choices)
+The qualitative comparison of the resize interpolation function showed little visible effect. After visual inspection, the nearest neighbou, linear, quadratic, cubic, and Lanczos sampling all look very similar to indistinguishable across resolutions from 16x16 to 128x128. We therefore keep linear as the default and do not investigate the interpolation function further.
+
+Removing Gaussian smoothing had a large visible effect, because the resized ERP image then kept fine trial-to-trial noise that often hid the pattern of interest. In this experiment, and all of the others, the patterns became barely or not at all recognisable without smoothing, and the model performance often dropped drastically, close to a class bias. We also tried to replace the Gaussian kernel, for example with the median or average of the kernel window. This looked visually very similar and tended to cost some performance, so we kept Gaussian smoothing as a mandatory step in the ERP image processing.
+
+Amplitude binning behaved in a related way, where two to four levels removed the pattern while sixteen or more levels approached the continuous image colour range. We inspected them visually and then discarded this idea, so the ERP images kept their continuous amplitudes. The idea was to reduce noise.
+
+Z-scoring before or after the resize mainly changed the colour range and left the visible structure almost unchanged. We decided to z-score before the smoothing and resize, so that unwanted vertical bands are removed from the ERP image as early as possible.
+
+As @tab:processing-step-results shows, the reference pipeline of sort, z-score, smoothing, and resize already reached almost the same performance as the tested variants. Clipping the amplitudes to the 1st and 99th percentile as in the plotting, scaling the whole ERP image trial amplitudes to a fixed range from -1 to 1, and enforcing an exact class balance each gave hardly any performance gain.
+
+#[
+  #show figure: set block(breakable: false)
+  #set text(size: 8pt)
+  #set par(justify: false)
+
+  #figure(
+    table(
+      columns: (2fr, 0.85fr, 0.85fr, 0.9fr, 0.9fr),
+      inset: (x: 4pt, y: 3pt),
+      stroke: (x: none, y: 0.45pt + luma(190)),
+      fill: (_, y) => if y == 0 { rgb("#f3f5f7") },
+      align: (x, y) => {
+        if y == 0 {
+          center + horizon
+        } else if x > 0 {
+          center + top
+        } else {
+          left + top
+        }
+      },
+      table.header(
+        [Processing step],
+        [1-layer CNN],
+        [3-layer CNN],
+        [10-layer CNN],
+        [ResNet18],
+      ),
+
+      [Reference pipeline],
+      [0.412],
+      [0.412],
+      [0.510],
+      [0.857],
+
+      [Per-image clip at 1st and 99th percentile],
+      [0.412],
+      [0.412],
+      [0.658],
+      [0.865],
+
+      [Per-image scale to range -1 to 1],
+      [0.412],
+      [0.412],
+      [0.569],
+      [0.865],
+
+      [Class balancing to 50/50],
+      [0.494],
+      [0.479],
+      [0.515],
+      [0.896],
+    ),
+    caption: [Macro-F1 by processing step and model input size at 64x64 on the reference fixations dataset under five-fold cross-validation. The reference pipeline is sort, z-score, Gaussian smoothing, and resize.],
+  ) <tab:processing-step-results>
+]
+
+=== Results of E8 (noise reduction and morphological filtering)
+The broad filter screen of 40 filters adds each filter as a second input channel next to the standard ERP image channel and finds only small differences in model performance gain. Total-variation denoising, the Laplacian, and a coarse difference-of-Gaussian rank highest, but all of them stay within a few points of the single-channel baseline without any extra filters. So the extra filter channel alone does not decide the outcome. 
+
+Hence we moved back to the single-channel combination order with Gaussian smoothing. As @tab:filter-combination-order shows, the filters gave no notable performance gain for the pretrained ResNet18 over the Gaussian-only reference, as in the previous experiment. We therefore did not pursue these filtering approaches further after E8.
+
+#[
+  #show figure: set block(breakable: false)
+  #set text(size: 8pt)
+  #set par(justify: false)
+
+  #figure(
+    table(
+      columns: (1.7fr, 0.95fr, 0.95fr, 0.95fr, 0.95fr),
+      inset: (x: 4pt, y: 3pt),
+      stroke: (x: none, y: 0.45pt + luma(190)),
+      fill: (_, y) => if y == 0 { rgb("#f3f5f7") },
+      align: (x, y) => {
+        if y == 0 {
+          center + horizon
+        } else if x > 0 {
+          center + top
+        } else {
+          left + top
+        }
+      },
+      table.header(
+        [Filter pipeline],
+        [Random init BAcc],
+        [Random init Macro-F1],
+        [Pretrained BAcc],
+        [Pretrained Macro-F1],
+      ),
+
+      [Gaussian only (reference)],
+      [0.828],
+      [0.822],
+      [0.904],
+      [0.898],
+
+      [Gaussian then filter],
+      [0.872],
+      [0.874],
+      [0.907],
+      [0.903],
+
+      [Filter then Gaussian],
+      [0.868],
+      [0.861],
+      [0.906],
+      [0.906],
+
+      [Filter only],
+      [0.875],
+      [0.881],
+      [0.828],
+      [0.823],
+    ),
+    caption: [Balanced accuracy and macro-F1 for the best of the eight morphological filters per pipeline on the reference fixations dataset, for a randomly initialised and a pretrained ResNet18.],
+  ) <tab:filter-combination-order>
+]
+
+=== Results of E9 (image and ERP-specific augmentation with imbalance handling)
+This experiment was one of the early to explore methods for augmentation strategies on real ERP images. Generic image augmentations did not preserve the ERP image label well. A small rotation shears the time and trial axes and leaves empty corners, and a crop drops part of a pattern, so both can move or remove the very pattern that defines the class. We therefore compared label-preserving ERP image specific augmentations, namely trial dropout which removes random trials before the image is built, pink-noise addition, time jitter which shifts trials slightly along the time axis, and a combination of these. As a separate branch we tested the imbalance strategies from @exp:augmentation without any augmentation, namely class-weighted cross-entropy, focal loss, and balanced batches.
+
+None of these methods gave a notable performance gain over the reference baseline. The imbalance strategies even lowered the scores and drove them towards the class bias, where the model mostly predicts the majority class. We therefore did not pursue these methods further, as in the previous experiment. We also considered self-supervised and semi-supervised learning to exploit the large pool of unlabelled ERP images, but discarded this direction for feasibility reasons.
+
+=== Results of E10 (input resolution and model capacity)
+@tab:resolution-results reports macro-F1 scores across resolutions. The 1- and 3-layer CNNs stay at the majority-class at every resolution, so extra visual information did not help a model that is too shallow. The 10-layer CNN improves steadily with resolution. The pretrained ResNet18 is the only model that separates the classes sufficient enough.
+
+Model training time grows as fast with increased resolution. Each step from 16x16 up to 256x256 quadruples the pixel count, and the training time follows a similar steep, roughly exponential growth, most clearly for the deeper models. The 10-layer CNN needs about 5 s per fold at 64x64, about 12 s at 128x128, and about 49 s at 256x256, while the pretrained ResNet18 grows from about 3 s to about 4 s to about 16 s over the same steps. This added cost buys only a negligible accuracy gain. The 64x64 resolution therefore gives ResNet18 most of its accuracy at a fraction of the runtime, which supports the 64x64 default used mostly in this thesis.
+
+#[
+  #show figure: set block(breakable: false)
+  #set text(size: 8pt)
+  #set par(justify: false)
+
+  #figure(
+    table(
+      columns: (1.2fr, 0.85fr, 0.85fr, 0.9fr, 0.9fr),
+      inset: (x: 4pt, y: 3pt),
+      stroke: (x: none, y: 0.45pt + luma(190)),
+      fill: (_, y) => if y == 0 { rgb("#f3f5f7") },
+      align: (x, y) => {
+        if y == 0 {
+          center + horizon
+        } else if x > 0 {
+          center + top
+        } else {
+          left + top
+        }
+      },
+      table.header(
+        [Resolution],
+        [1-layer CNN],
+        [3-layer CNN],
+        [10-layer CNN],
+        [ResNet18],
+      ),
+
+      [16x16],
+      [0.412],
+      [0.412],
+      [-],
+      [-],
+
+      [32x32],
+      [0.412],
+      [0.412],
+      [-],
+      [-],
+
+      [64x64],
+      [0.412],
+      [0.412],
+      [0.510],
+      [0.857],
+
+      [128x128],
+      [0.412],
+      [0.412],
+      [0.551],
+      [0.897],
+
+      [256x256],
+      [0.412],
+      [0.412],
+      [0.663],
+      [0.848],
+    ),
+    caption: [Macro-F1 by input resolution and model on the reference fixations dataset under five-fold cross-validation. A dash marks a model and resolution combination that was not trained because the deeper models need a minimum input size.],
+  ) <tab:resolution-results>
+]
+
+== Further Findings <sec:further-findings>
+A side observation across the simulation and real experiments is that every evaluated CNN, even the smaller ones, could recognise the source resolution of an ERP image. An image that was downscaled to the model input size from its original high resolution was reliably told apart from an image that was downscaled to the same input size from a lower resolution. As a consequence the models learned a class bias per recognised source resolution. This mainly motivated and made the uniform augmentation necessary @sec:real-to-real-augmentation.
 
 // ----------------------------------------------------------------------------
 // Chapter 5 - Interpret the findings, state limitations honestly, and derive
@@ -1386,13 +1567,15 @@ A side observation across the simulation experiments is that every evaluated CNN
 
 == Interpretation of the Main Findings
 
+The table supports H1.1b because simulated holdout BAcc exceeds real-source BAcc for both simulator-trained models with valid repeats. The Monte Carlo model collapses because all three repeats predict almost all examples as sigmoid on every validation source. The real-fixations baseline reaches almost perfect performance on the calibration source, but it does not carry equally well to the other real sources. E5 therefore shows that the simulator-trained models recognise the simulated sigmoid task, but the learned decision boundary does not transfer reliably to real ERP images.
+
 TODO RQ1: mention that the CNN can be trained in a manageable amount of time and does not require specialised hardware beyond a GPU.
 
 
 == Limitations
 The main limitation of this thesis is the sim-to-real gap. The simulator can generate labelled ERP images in large numbers, but it can only generate the kind of variability that was built into it. Real EEG also contains subject-specific responses, non-stationary noise, artefacts, imperfect event timing, and preprocessing effects. This means that strong performance on synthetic images is not enough to show that the model has learned a real ERP image pattern @Krol2018SEREEGA, @Schepers2025. The weak transfer result should therefore be read as a genuine limitation of the setup, not just as a tuning problem.
 
-A related risk is shortcut learning. CNNs often exploit whichever visual regularity is easiest for the training objective, even if that regularity is not the intended concept @Geirhos2020ShortcutLearning. In this project, such shortcuts could come from simulator-specific smoothness, noise texture, colour scaling, or unusually clean pattern boundaries. Domain randomisation is meant to reduce that risk by varying the synthetic world, but it cannot remove it completely @Tobin2017. The same applies to the chosen augmentation steps: all of the tested CNN models can detect and perfectly decide whether a high- or low-resolution matrix was scaled down to the same target size.
+A related risk is shortcut learning. CNNs often exploit whichever visual regularity is easiest for the training objective, even if that regularity is not the intended concept @Geirhos2020ShortcutLearning. In this project, such shortcuts could come from simulator-specific smoothness, noise texture, colour scaling, or unusually clean pattern boundaries. Domain randomisation is meant to reduce that risk by varying the synthetic world, but it cannot remove it completely @Tobin2017. The resize step is another example, where every tested CNN can tell apart ERP images by their source resolution, as @sec:further-findings reports.
 
 The manual labeling is another limitation. The real-data evaluation uses only a limited number of manually labelled ERP images, and visual pattern labels are not as objective as event markers or stimulus classes. Borderline cases can reasonably be judged differently, for instance when a weak and noisy sigmoid appears. Reliability measures are normally used to quantify such disagreement when several raters label the same material @Artstein2008InterCoderAgreement, @Hallgren2012InterRaterKappa. Without that type of agreement analysis, disagreement between the classifier and the labels cannot always be interpreted as model error alone.
 
