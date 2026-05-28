@@ -1,0 +1,48 @@
+{
+    "max_instances_per_class": 10,
+    "selection_policy": "deterministic first rows per class after sorting by dataset_key, sort_variable, channel_name",
+    "variants": [
+        "NL-means",
+        "NL-means + smoothing",
+        "Smoothing only"
+    ],
+    "resize_applied": false,
+    "nlm_paper_lambda": 1000,
+    "gaussian_kernel_size": [
+        21,
+        21
+    ],
+    "nlm_reference": "Strauss et al. 2013, PMID 23060344, DOI 10.1109/TNSRE.2012.2220568",
+    "manifest_path": "/home/benjamin/Dokumente/BA2/notebooks/week_25/outputs/nlm_erp_image_denoising/selected_instances.csv",
+    "output_dir": "/home/benjamin/Dokumente/BA2/notebooks/week_25/outputs/nlm_erp_image_denoising",
+    "nlm_patch_radius": [
+        5,
+        5
+    ],
+    "nlm_lambda_zscored_images": 1,
+    "gaussian_low_pass_factor": 75,
+    "task": "ERP image NL-means denoising visual comparison",
+    "filter_border": "reflect",
+    "classes": [
+        "sigmoid",
+        "one_sided_fan",
+        "two_sided_fan",
+        "diverging_bar",
+        "hourglass",
+        "tilted_bar"
+    ],
+    "nlm_patch_size": [
+        11,
+        11
+    ],
+    "preprocessing": "sort trials by labelled sort variable -> zscore_timepoints -> no resize",
+    "nlm_patch_sigma": [
+        0.5,
+        5.0
+    ],
+    "nlm_search_radius": [
+        3,
+        6
+    ],
+    "timestamp": "2026-05-27T17:51:22.141"
+}
