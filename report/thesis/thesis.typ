@@ -5,7 +5,18 @@
 
 
 // Fill me with the Abstract
-#let abstract = [#lorem(150)]
+#let abstract = [
+  Electroencephalography (EEG) records brain activity with millisecond resolution, but the response to an event is usually summarised by averaging many repeated trials, which hides how the individual trials differ. An event-related potential (ERP) image keeps this single-trial structure visible by stacking the sorted trials into a two-dimensional image, in which recurring visual patterns can point to cognitive effects. Inspecting these images by hand does not scale to the many subjects, EEG input channels, and sorting variables that may study produces. Labelled examples for training an automatic detector are scarce. This thesis asks whether convolutional neural networks (CNN) can detect such visual patterns automatically, and whether simulated images can reduce the need for manually labelled real data.
+
+  We build a simulation pipeline that generates pattern as sigmoid shapes and pattern-free images and use it to train a convolutional network. Trained only on simulated images, the network reaches a balanced accuracy of 0.93 on the reference fixation dataset, well above chance, yet its accuracy drops on other real recordings, which shows a measurable gap between simulated and real data. Calibrating the simulator parameters narrows this gap without closing it, and broad random sampling of the parameters transfers more reliably than the more structured search strategies we test.
+
+  Training a CNN on a manually labelled pool drawn from ten ERP recording sources works better. With Gaussian smoothing and a pattern-preserving augmentation that slices each image along the trial axis, a pretrained network reaches a balanced accuracy of 0.92. This was achived with an input size of 64×64 which keeps most of the visual information at a small fraction of the training cost. Convolutional networks therefore detect these patterns reliably and cheaply. The main open problems are the remaining gap between simulated and real data and the runtime of the simulation, which currently dominates the cost of the simulated approach.
+
+  #v(2em)
+  = Kurzfassung
+
+TODO german abstract
+]
 
 // Fill me with acknowledgments
 #let acknowledgements = none
@@ -1619,15 +1630,12 @@ The results are also conditional on the chosen preprocessing pipeline. Sorting, 
 A further limitation is that the different sampling rates across the data sources were not handled. The sources range from 250 to 512 Hz. We tried to equalise the time axis with time-point dropping, but discarded it because it left unnatural ridges, as @sec:further-findings describes. In our pool the sampling-rate differences were less pronounced than the trial-count differences, and the trial-slicing augmentation already equalises the trial axis, so we did not add a separate strategy for the time axis.
 
 == Future Work
-One useful next step is a non-CNN baseline for the same ordered-matrix task. TODO transformer model
+One useful next step is a non-CNN baseline for the same classification task. Transformer-based image models have gained popularity in recent years and classify images through self-attention rather than the local convolutions a CNN relies on, which lets them relate distant regions of an image directly @Dosovitskiy2021ViT. So attention across the trial and time axes in an ERP image is a plausible alternative to convolution. A first comparison could pair the pretrained ResNet18 with a Vision Transformer. Attention models for EEG and ERP decoding already show that self-attention over channels and time can match convolutional models @Song2023EEGConformer, @Zelger2025BeyondAveraging.
 
-TODO simulation speed up, currently its not feasable. better performance on multitheading
+A further direction is to make the simulation faster. Generating images for a single ERP pattern is already an efficiency concern with the current pipeline. Covering all six patterns the same way would take roughly a week of runtime, which is not practical. Better use of multithreading is the most obvious lever.
+A faster simulator would also let us tune the parameters of each pattern on its own. We only tuned the sigmoid in this thesis, so the other five patterns may transfer better under their own settings.
 
-todo simulation find parameters for each patterns rather than overall. in this case sigmoid was tested. all patterns may take up hole week of runtime. maybe data set per input dimensions, as cnn model can detect very accurately if a high resolution image was scaled down or a low resolution image was sclaed down.
-
-A second extension is localisation. The current classifier assigns one label to an entire ERP image, so it cannot mark where a pattern starts, ends, or overlaps with another structure. Detection-style biomedical imaging work such as Brain-RetinaNet shows how convolutional models can move from image-level classification towards localising relevant regions @Iqbal2026BrainRetinaNet. For ERP images, such a shift would require labels for pattern extents in trial-time space, not only image-level labels.
-
-Augmentation is very important. One option is to simulate data for a specific real dataset.
+A third extension is localisation. The current classifier assigns one label to an entire ERP image, so it cannot mark where a pattern starts, ends, or overlaps with another structure. Detection-style biomedical imaging work such as Brain-RetinaNet shows how convolutional models can move from image-level classification towards localising relevant regions @Iqbal2026BrainRetinaNet. For ERP images, such a shift would require labels for pattern extents in trial-time space, not only image-level labels. This may also be beneficial for the vision transformer models.
 
 A next step is to embed the trained CNN into ERPgnostics.jl @ERPgnosticsDocs, where its class probabilities act as the pattern measure for exploring new ERP datasets. Combined with the trial-slicing augmentation, the model could screen many subjects, channels, and sorting variables and surface the few images worth a closer look.
 
@@ -1639,3 +1647,10 @@ A next step is to embed the trained CNN into ERPgnostics.jl @ERPgnosticsDocs, wh
 
 // Summarize the core takeaway in a few sentences and answer the research
 // question directly.
+This thesis asked whether convolutional neural networks can detect visual ERP image patterns automatically, and whether simulated ERP images can reduce the need for manually labelled real data.
+
+On the first question the answer is a qualified yes. A ResNet18 trained only on simulated sigmoid images reaches 0.926 balanced accuracy on the reference fixation dataset, well above chance. Better simulator calibration narrows the measurable sim-to-real gap without closing it fully. Broad random parameter sampling transfers more reliably than the structured strategies we tested. A simulator-trained model is therefore a useful starting point, but it does not yet replace manual labels across datasets.
+
+On the second question, training on manually labelled real ERP images works well. A pretrained ResNet18 reaches 0.918 balanced accuracy on the labelled pool, helped most by Gaussian smoothing and by pattern-preserving augmentation such as trial slicing with inverse sort and polarity. At 64x64 the model keeps most of this accuracy at a fraction of the training cost, so the patterns are detectable both reliably and cheaply on PC hardware.
+
+Taken together, CNNs can detect ERP image patterns. Simulation can cut the labelling effort for at least the sigmoid pattern, yet closing the sim-to-real gap for all six patterns is still the an open problem. A faster simulator with parameters tuned per pattern is the most promising route.
