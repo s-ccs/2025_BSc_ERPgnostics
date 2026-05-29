@@ -387,9 +387,7 @@ We investigate whether convolutional neural networks can detect visual ERP image
 
     + *Simulator parameter calibration* <rq:simulator-calibration> How does simulator parameter calibration affect sim-to-real transfer and what performance gap remains compared with training on real labelled ERP images?
 
-      - *H1.2a: Targeted simulator parameter calibration* <hyp:simulator-calibration-targeted> Simulator parameter calibration with Latin hypercube or Monte Carlo sampling will improve sim-to-real transfer compared with broad random parameter sampling on the same real validation source.
-
-      - *H1.2b: Source-specific simulator parameter calibration* <hyp:simulator-calibration-source> A simulator parameter set calibrated to one real source will transfer best to that source for the sigmoid versus no class task. Its advantage will decrease for other real ERP image sources, even when they contain sigmoid and no class examples.
+      - *H1.2a: Targeted simulator parameter calibration* <hyp:simulator-calibration-targeted> Simulator parameter calibration with Latin hypercube or Monte Carlo sampling will improve sim-to-real transfer compared with broad random parameter sampling on different real validation sources.
         #v(.7em)
 
   + *Manual labelling* <rq:manual-labelling> How accurately and efficiently can CNNs detect visual ERP image patterns when they are trained on manually labelled real ERP images?
@@ -1558,6 +1556,12 @@ Model training time grows as fast with increased resolution. Each step from 16x1
 == Further Findings <sec:further-findings>
 A side observation across the simulation and real experiments is that every evaluated CNN, even the smaller ones, could recognise the source resolution of an ERP image. An image that was downscaled to the model input size from its original high resolution was reliably told apart from an image that was downscaled to the same input size from a lower resolution. As a consequence the models learned a class bias per recognised source resolution. This mainly motivated and made the uniform augmentation necessary @sec:real-to-real-augmentation.
 
+A related attempt concerned the different sampling rates across the data sources. We looked for an augmentation strategy that could bring recordings with different sampling rates onto a common time axis. One idea was time-point dropping, where single columns are removed from the ERP image to shorten the time axis. We discarded this idea after testing, because the dropped columns left visible ridges. Such ridges are unnatural for an EEG signal, since they create disconnected jumps along the time axis, and a CNN could pick them up as another shortcut feature.
+
+Another practical finding is that the classifier is efficient to train on a desktop PC with one GPU and no specialised or cluster hardware. Training a ResNet18 for one cross-validation fold took from a few seconds to under a minute, depending on the resolution and the pool size.
+
+We also tried to move the ERP image processing onto the GPU, in particular the Gaussian smoothing, which is a typical GPU task. This works, but it needs batch processing where each batch is copied into GPU memory, processed, and copied back to RAM, and although the processing itself is fast, these transfers cost time. Because such a batched pipeline is both effortful to implement and needs careful optimisation to give a noticeable speed-up, we tried it but did not pursue it further for now.
+
 // ----------------------------------------------------------------------------
 // Chapter 5 - Interpret the findings, state limitations honestly, and derive
 // realistic next steps.
@@ -1565,25 +1569,54 @@ A side observation across the simulation and real experiments is that every eval
 #pagebreak()
 = Discussion <chp:discussion>
 
+This chapter interprets the results from @chp:results. We first revisit each hypothesis from @chp:introduction and decide whether the evidence supports it. We then state the limitations of the setup and outline the future work.
+
 == Interpretation of the Main Findings
 
-The table supports H1.1b because simulated holdout BAcc exceeds real-source BAcc for both simulator-trained models with valid repeats. The Monte Carlo model collapses because all three repeats predict almost all examples as sigmoid on every validation source. The real-fixations baseline reaches almost perfect performance on the calibration source, but it does not carry equally well to the other real sources. E5 therefore shows that the simulator-trained models recognise the simulated sigmoid task, but the learned decision boundary does not transfer reliably to real ERP images.
+We take the hypotheses in the order of the two major research questions and give each one a verdict with its evidence. So the task here is to check whether the measured results confirm or reject it.
 
-TODO RQ1: mention that the CNN can be trained in a manageable amount of time and does not require specialised hardware beyond a GPU.
+The first research question, #link(<rq:sim-to-real-sigmoid>)[RQ 1.1], asks to what extent a CNN trained on simulated sigmoid images recognises sigmoid patterns in real data. 
 
+Hypothesis H1.1a predicts above-chance recognition of real sigmoid and no class images, and we accept it. The main evidence is in @tab:simulation-resnet18-64-results, where a ResNet18 trained only on simulated images reaches a balanced accuracy of 0.926 on the reference fixation dataset, well above the 0.5 chance and majority-class level. The other simulation experiments point the same way and also stay above chance. Such a high score shows that the simulator behaves as expected and can generate ERP images realistic enough for a model to carry its learned sigmoid concept over to real recordings.
+
+Hypothesis H1.1b predicts a measurable sim-to-real gap. The answer is yes. Across the simulation experiments the models often reached (almost) perfect scores on the generated data, as in @tab:simulation-calibration-results, which could mean that a model still tells simulated and real images apart easily. The same models score lower on every real source in @tab:cross-source-sim-to-real-performance, so the drop from simulated to real data is present and measurable.
+
+Taken together, the two hypotheses answer #link(<rq:sim-to-real-sigmoid>)[RQ 1.1]. A CNN trained only on simulated sigmoid images does recognise the sigmoid pattern in manually labelled real images, and on the reference fixation data it reaches a high accuracy. The transfer is strong on the calibration source but only partial across datasets.
+
+The calibration sub-question, #link(<rq:simulator-calibration>)[RQ 1.2], asks whether better simulator parameter calibration narrows that gap. Hypothesis H1.2a predicts that Latin hypercube or Monte Carlo sampling improves transfer over broad-random sampling across different real validation sources. The answer is no. In the 64x64 ResNet18 search of @tab:simulation-resnet18-64-results, broad-random sampling gives the best balanced accuracy, ahead of both structured strategies, and the same ordering holds on the real sources in @tab:cross-source-sim-to-real-performance, where the Monte Carlo model even collapses to one predicted class. So calibration narrows the gap but does not close it.
+
+A further insight follows from the same comparison. A single real dataset does not generalise far across the other sources, and a simulator calibrated to that one source inherits the same limit. Finding one parameter set and simulating a single general dataset is therefore not enough to cover the range of real ERP images.
+
+Overall, the first research question, #link(<rq:sim-to-real>)[RQ 1], asks how accurately and efficiently a CNN trained on simulated ERP images detects sigmoid patterns in real data. On accuracy, the model works well on the calibration source and stays above chance on most other real sources, yet a measurable gap to its perfect simulated performance remains. On efficiency, training and inference stay cheap on PC hardware, while generating the simulated images dominates the runtime in @tab:simulation-resnet18-64-timing. The simulation is the bottleneck rather than the classifier. Training on simulated data alone therefore detects sigmoid patterns on the calibration source, but it does not yet generalise to real ERP images across datasets. A simulator-trained CNN is therefore a useful starting point, but it does not yet replace training on real labelled data.
+
+The second research question, #link(<rq:manual-labelling>)[RQ 2], moves to models trained on manually labelled real images for supervised learning. For the preprocessing sub-question #link(<rq:real-preprocessing>)[RQ 2.1], hypothesis H2.1 predicts that the preprocessing steps and their order affect performance. The answer is yes. @tab:processing-step-results shows that Gaussian smoothing is a necessary step, because removing it pushes the patterns below visual recognition and drops the model close to a class bias. 
+
+The experiments also add many image filters for noise reduction and morphological operations, but these give no notable gain over the reference pipeline in @tab:filter-combination-order. A reasonable conclusion is to keep the preprocessing minimal and to let the convolution layers of the CNN do the pattern detection.
+
+In answer to #link(<rq:real-preprocessing>)[RQ 2.1], the preprocessing choice that improves classification is Gaussian smoothing, while the further steps and filters added no gain, so a minimal pipeline works best.
+
+For augmentation and class imbalance, #link(<rq:real-augmentation>)[RQ 2.2], hypothesis H2.2 predicts that ERP-specific augmentation and imbalance handling improve performance. The answer is yes. The trial-slicing augmentation with inverse sort and polarity helps, lifting the pretrained ResNet18 from 0.866 to 0.918 balanced accuracy in @tab:real-data-classification-results. 
+
+Trial dropout, pink-noise addition, and time jitter add no gain in @exp:augmentation, and the loss-based imbalance strategies even push the model towards a class bias. So only augmentation that keeps the pattern intact helped.
+
+In answer to #link(<rq:real-augmentation>)[RQ 2.2], augmentation helps only when it preserves the pattern, as with trial slicing and inverse sort and polarity, while common photograph augmentations and imbalance handling do not improve performance.
+
+For model choice and resolution, #link(<rq:real-model-choice>)[RQ 2.3], hypothesis H2.3 predicts measurable accuracy-efficiency trade-offs across architecture and resolution. The answer is yes. The shallow 1- and 3-layer CNNs stay at the majority class at every resolution in @tab:resolution-results, the 10-layer CNN improves slowly, and only the pretrained ResNet18 separates the two classes well enough. ResNet34 matches ResNet18 at a higher training cost, and training time grows steeply with resolution while accuracy barely moves above 64x64, so the 64x64 ResNet18 gives the best trade-off.
+
+In answer to #link(<rq:real-model-choice>)[RQ 2.3], the pretrained ResNet18 at 64x64 is the preferred configuration, because shallower CNNs fail to separate the classes and larger models or higher resolutions cost more without a real accuracy gain for our tests.
+
+Overall, the second research question, #link(<rq:manual-labelling>)[RQ 2], asks how accurately and efficiently CNNs detect ERP image patterns when trained on manually labelled real images. On accuracy, a pretrained ResNet18 reaches 0.918 balanced accuracy on the labelled pool with pattern-preserving augmentation. On efficiency, training stays cheap on a desktop GPU, with 64x64 as the resolution that keeps most of the accuracy at a fraction of the cost. Trained on real labels, a CNN therefore detects the patterns reliably and at low cost, which the simulator-trained model does not yet match.
 
 == Limitations
-The main limitation of this thesis is the sim-to-real gap. The simulator can generate labelled ERP images in large numbers, but it can only generate the kind of variability that was built into it. Real EEG also contains subject-specific responses, non-stationary noise, artefacts, imperfect event timing, and preprocessing effects. This means that strong performance on synthetic images is not enough to show that the model has learned a real ERP image pattern @Krol2018SEREEGA, @Schepers2025. The weak transfer result should therefore be read as a genuine limitation of the setup, not just as a tuning problem.
+The main limitation of this thesis is the sim-to-real gap. The simulator can generate labelled ERP images in large numbers, but it can only generate the kind of variability that was built into it. Real EEG also contains subject-specific responses, non-stationary noise, artefacts, imperfect event timing, and preprocessing effects. This means that strong performance on synthetic images is not enough to show that the model has generalised sufficiently for patterns from real ERP images @Krol2018SEREEGA, @Schepers2025. The weak transfer result should therefore be read as a genuine limitation of the setup, not just as a tuning problem.
 
-A related risk is shortcut learning. CNNs often exploit whichever visual regularity is easiest for the training objective, even if that regularity is not the intended concept @Geirhos2020ShortcutLearning. In this project, such shortcuts could come from simulator-specific smoothness, noise texture, colour scaling, or unusually clean pattern boundaries. Domain randomisation is meant to reduce that risk by varying the synthetic world, but it cannot remove it completely @Tobin2017. The resize step is another example, where every tested CNN can tell apart ERP images by their source resolution, as @sec:further-findings reports.
+A related risk is shortcut learning. CNNs often exploit whichever visual regularity is easiest for the training objective, even if that regularity is not the intended concept @Geirhos2020ShortcutLearning. In this project, such shortcuts could come from simulator-specific smoothness, noise texture, colour scaling, or unusually clean pattern boundaries. Domain randomisation can lower this risk, since varying the simulator parameters widely keeps the model from relying on any single simulator cue, but it cannot remove the risk completely @Tobin2017. The resize step is another example, where every tested CNN can tell apart ERP images by their source resolution, as @sec:further-findings reports.
 
 The manual labeling is another limitation. The real-data evaluation uses only a limited number of manually labelled ERP images, and visual pattern labels are not as objective as event markers or stimulus classes. Borderline cases can reasonably be judged differently, for instance when a weak and noisy sigmoid appears. Reliability measures are normally used to quantify such disagreement when several raters label the same material @Artstein2008InterCoderAgreement, @Hallgren2012InterRaterKappa. Without that type of agreement analysis, disagreement between the classifier and the labels cannot always be interpreted as model error alone.
 
 The results are also conditional on the chosen preprocessing pipeline. Sorting, z-scoring, smoothing, and resizing all change the image seen by the CNN. This is not a minor technical detail. ERP methods research shows that reasonable processing choices can lead to different measurements and conclusions @Clayson2021ERPMultiverse.
 
-TODO add more, computational power is fine. Maybe the ones from midterm and proposal.
-
-TODO different saplingrates where not handled. dropping timepoints created unnatrual looking ridges, can be visualy inspected by human eye, mybe shortcut leaning
+A further limitation is that the different sampling rates across the data sources were not handled. The sources range from 250 to 512 Hz. We tried to equalise the time axis with time-point dropping, but discarded it because it left unnatural ridges, as @sec:further-findings describes. In our pool the sampling-rate differences were less pronounced than the trial-count differences, and the trial-slicing augmentation already equalises the trial axis, so we did not add a separate strategy for the time axis.
 
 == Future Work
 One useful next step is a non-CNN baseline for the same ordered-matrix task. TODO transformer model
@@ -1595,6 +1628,8 @@ todo simulation find parameters for each patterns rather than overall. in this c
 A second extension is localisation. The current classifier assigns one label to an entire ERP image, so it cannot mark where a pattern starts, ends, or overlaps with another structure. Detection-style biomedical imaging work such as Brain-RetinaNet shows how convolutional models can move from image-level classification towards localising relevant regions @Iqbal2026BrainRetinaNet. For ERP images, such a shift would require labels for pattern extents in trial-time space, not only image-level labels.
 
 Augmentation is very important. One option is to simulate data for a specific real dataset.
+
+A next step is to embed the trained CNN into ERPgnostics.jl @ERPgnosticsDocs, where its class probabilities act as the pattern measure for exploring new ERP datasets. Combined with the trial-slicing augmentation, the model could screen many subjects, channels, and sorting variables and surface the few images worth a closer look.
 
 // ----------------------------------------------------------------------------
 // Chapter 6 - End with direct answers, not a second discussion.
