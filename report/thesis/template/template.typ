@@ -627,7 +627,15 @@
 
   // -- Front matter --
 
-  // Display front page
+  // Display custom University of Stuttgart title page.
+  include "../titlepage.typ"
+  pagebreak()
+
+  // Restore the template defaults after the standalone title page.
+  set text(font: serif-fonts, size: 11pt)
+  set par(justify: true, linebreaks: "optimized", spacing: 2em)
+
+  // Display the existing template title page as the second page.
   frontpage(
     title: title,
     subtitle: subtitle,
@@ -782,6 +790,11 @@
   in-appendix.update(true)
   appendix
 
-  // Display back page
+  // Display the existing template back page as the penultimate page.
+  pagebreak()
   backpage()
+
+  // Display custom declaration as the final page.
+  pagebreak()
+  include "../declaration.typ"
 }
