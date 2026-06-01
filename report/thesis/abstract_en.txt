@@ -1,0 +1,31 @@
+Abstract
+
+Electroencephalography (EEG) measures the electrical activity of neurons at
+the scalp with millisecond resolution (Light et al., 2010). Each recording
+contains unrelated activity and noise, so researchers average many repeated
+trials into one event-related potential (ERP) wave form to raise the
+signal-to-noise ratio. This averaging obscures the trial-to-trial
+information. An ERP image keeps the single-trial structure, by stacking
+sorted trials into a two-dimensional image in which recurring shapes may
+point to cognitive effects (Jung et al., 2001). Inspecting these images by
+hand does not scale well to studies with many subjects, channels, and
+sorting variables, and the labelled data required to automate it are scarce.
+This thesis tests whether a convolutional neural network (CNN) can detect
+such patterns, and whether simulated ERP images can reduce the need for
+manually labelled real data.
+
+A CNN trained only on simulated images recognises one pattern type in a
+template real dataset but transfers less reliably to other recordings, which
+leaves a measurable gap between simulated and real data. Trained instead on
+a pool of manually labelled real images, with a pattern-preserving
+augmentation, a pretrained CNN reaches a balanced accuracy of 0.92 at a
+64×64 input size. Convolutional networks can therefore detect these patterns
+reliably and at low computational cost, leaving the gap between simulated
+and real data and the runtime of the simulation as the main open problems.
+
+
+References
+
+Jung, T.-P., Makeig, S., Westerfield, M., Townsend, J., Courchesne, E., & Sejnowski, T. J. (2001). Analysis and visualization of single-trial event-related potentials. Human Brain Mapping, 14(3), 166-185. https://doi.org/10.1002/hbm.1050
+
+Light, G. A., Williams, L. E., Minow, F., Sprock, J., Rissling, A., Sharp, R., Swerdlow, N. R., & Braff, D. L. (2010). Electroencephalography (EEG) and event-related potentials (ERPs) with human participants. Current Protocols in Neuroscience, 52(1), 6.25.1-6.25.24. https://doi.org/10.1002/0471142301.ns0625s52

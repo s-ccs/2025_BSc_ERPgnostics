@@ -14,6 +14,31 @@
   #v(2em)
   = Kurzfassung
 
+Elektroenzephalografie (EEG) misst die elektrische Aktivität von Neuronen an
+der Kopfhaut mit einer zeitlichen Auflösung im Millisekundenbereich @Light2010.
+Jede Aufzeichnung enthält nicht zugehörige Aktivität und Rauschen, weshalb
+Forschende viele wiederholte Durchgänge (trials) zu einem ereigniskorrelierten
+Potenzial (ERP) mitteln, um das Signal-Rausch-Verhältnis zu erhöhen. Diese
+Mittelung verdeckt die Unterschiede zwischen den einzelnen Durchgängen. Ein ERP
+image bewahrt die Einzeltrial-Struktur, indem es sortierte trials zu einem
+zweidimensionalen Bild stapelt, in dem wiederkehrende Formen auf kognitive
+Effekte hindeuten können @Jung2001. Die manuelle Inspektion dieser Bilder
+skaliert nicht gut auf Studien mit vielen Probanden, Kanälen und
+Sortiervariablen, und die für die Automatisierung benötigten gelabelten Daten
+sind rar. Diese Arbeit untersucht, ob ein Convolutional Neural Network (CNN)
+solche Muster erkennen kann und ob simulierte ERP images den Bedarf an manuell
+gelabelten realen Daten verringern können.
+
+Ein CNN, das nur auf simulierten Bildern trainiert wurde, erkennt einen
+Mustertyp in einem als Vorlage dienenden realen Datensatz, überträgt sich aber
+weniger zuverlässig auf andere Datensätze, wodurch eine messbare Lücke
+zwischen simulierten und realen Daten bestehen bleibt. Wird ein vortrainiertes
+CNN stattdessen auf einem Pool manuell gelabelter realer Bilder mit einer
+musterbewahrenden Augmentierung trainiert, erreicht es eine balanced accuracy
+von 0,92 bei einer Eingabegröße von 64×64. Convolutional-Netze können diese
+Muster somit zuverlässig und mit geringem Rechenaufwand erkennen. Damit bleiben
+die Lücke zwischen simulierten und realen Daten und die Laufzeit der Simulation
+die wichtigsten offenen Probleme.
 ]
 
 // Fill me with acknowledgments
