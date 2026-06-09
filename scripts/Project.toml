@@ -2,5 +2,7 @@
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 ImageFiltering = "6a3955dd-da59-5b1f-98d4-e7296123deb5"
+ImageTransformations = "02fcd773-0e25-5acc-982a-7f6622650795"
+Interpolations = "a98d9a8b-a2ab-59e6-89dd-64a1c18fca59"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"

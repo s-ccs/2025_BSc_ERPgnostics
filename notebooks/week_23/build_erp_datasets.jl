@@ -392,14 +392,10 @@ function standard_events_metadata(dataset_key::AbstractString, label::AbstractSt
         "dataset_label" => String(label),
         "citation" => dataset_citation(dataset_key),
         "sampling_rate_hz" => Float64(cache.sfreq_hz),
-        "pre_stim_s" => source_pre_stim_s(cache.times_s),
         "time_start_s" => Float32(first(post_times)),
         "time_end_s" => Float32(last(post_times)),
         "n_trials" => Int(nrow(events)),
         "n_timepoints_post" => Int(length(cache.post_idx)),
-        "baseline_correct" => Bool(BASELINE_CORRECT_BY_DATASET[dataset_key]),
-        "subject_labels" => String.(bundle.subject_labels),
-        "sort_columns" => string_sort_columns(Week15.available_sort_columns(bundle)),
     )
 end
 
@@ -475,22 +471,10 @@ function reference_events_metadata(dataset_key::AbstractString, label::AbstractS
         "dataset_label" => String(label),
         "citation" => dataset_citation(dataset_key),
         "sampling_rate_hz" => Float64(REFERENCE_SAMPLING_RATE),
-        "pre_stim_s" => Float32(REFERENCE_PRE_STIM_S),
         "time_start_s" => 0.0f0,
         "time_end_s" => Float32((n_timepoints_post - 1) / REFERENCE_SAMPLING_RATE),
         "n_trials" => Int(nrow(events)),
         "n_timepoints_post" => Int(n_timepoints_post),
-        "baseline_correct" => false,
-        "subject_labels" => ["reference_fixations"],
-        "sort_columns" => [
-            "duration",
-            "sac_amplitude",
-            "fix_avgpos_x",
-            "fix_avgpupilsize",
-            "fix_type",
-            "latency",
-            "rt_ms",
-        ],
     )
 end
 
