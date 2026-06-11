@@ -19,7 +19,7 @@ Return the default repository data directory used by the ERP source helpers.
 - `String`: Normalized path to `datasets/` at the repository root.
 """
 function default_data_root()
-    return normpath(joinpath(@__DIR__, "..", "datasets"))
+    return normpath(joinpath(@__DIR__, "..", "..", "datasets"))
 end
 
 """
@@ -189,6 +189,7 @@ function list_datasets(data_root = default_data_root())
     dataset_keys = String[]
     for name in readdir(data_root)
         path = joinpath(data_root, name)
+        # Only complete bundle folders count as datasets.
         if isdir(path) && isfile(joinpath(path, "events.jld2")) && isdir(joinpath(path, "signals"))
             push!(dataset_keys, String(name))
         end
@@ -231,9 +232,12 @@ Load label rows from `labels.jld2`, or return the standard empty label table.
 """
 function load_labels(dataset_key; data_root = default_data_root())
     path = labels_path(dataset_key; data_root = data_root)
+
+    # Missing labels mean the dataset is usable but unlabeled.
     isfile(path) || return empty_labels()
 
     labels = DataFrame(JLD2.load(path, "labels"))
+    # Check the required label columns before downstream matching.
     for column in propertynames(empty_labels())
         column in propertynames(labels) || error("labels.jld2 is missing required column $(column).")
     end
@@ -257,6 +261,7 @@ function list_channels(dataset_key; data_root = default_data_root())
     channels = String[]
     for name in readdir(path)
         endswith(name, ".jld2") || continue
+        # In this format the signal filename is the channel name.
         push!(channels, first(splitext(name)))
     end
     sort!(channels)
@@ -279,6 +284,8 @@ Load one channel signal matrix and its metadata.
 """
 function load_signal(dataset_key, channel_name; data_root = default_data_root())
     path = require_file(signal_path(dataset_key, channel_name; data_root = data_root))
+
+    # Preserve the stored timepoints x trials layout.
     data_time_trials = Matrix{Float32}(JLD2.load(path, "data_time_trials"))
     return (
         data_time_trials = data_time_trials,
@@ -322,6 +329,7 @@ function labels_for(dataset_key, channel_name, sort_variable; data_root = defaul
     labels = load_labels(dataset_key; data_root = data_root)
     isempty(labels) && return labels
 
+    # Match through strings so missing, Symbol, and String cells behave consistently.
     channel_matches = [cellstring(value) == String(channel_name) for value in labels[!, :channel_name]]
     sort_matches = [cellstring(value) == String(sort_variable) for value in labels[!, :sort_variable]]
     return labels[channel_matches .& sort_matches, :]

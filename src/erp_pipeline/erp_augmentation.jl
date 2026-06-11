@@ -12,7 +12,7 @@ using Random: MersenneTwister, shuffle
 """
     augmentation_variants()
 
-Define the four ERP image augmentation variants used by the project.
+Define the four standard ERP image augmentation variants.
 
 # Arguments
 - None.
@@ -36,7 +36,7 @@ end
 Split a parent trial order into fixed-size chunks.
 
 If a remainder exists, it is filled by sampling from unused parent trial indices.
-The default seed is `time_ns()` as requested for this project.
+The default seed is `time_ns()`.
 
 # Arguments
 - `trial_order`: Parent trial indices, usually sorted by the selected event column.
@@ -61,6 +61,7 @@ function trial_chunks(trial_order, target_trials; seed = time_ns())
     full_count = div(length(order), target_trials)
     remainder_count = rem(length(order), target_trials)
 
+    # Store complete chunks that already match the requested trial count.
     for chunk_index in 1:full_count
         start_index = (chunk_index - 1) * target_trials + 1
         stop_index = chunk_index * target_trials
@@ -79,6 +80,7 @@ function trial_chunks(trial_order, target_trials; seed = time_ns())
         ))
     end
 
+    # Fill the final partial chunk with unused trials to keep a fixed image height.
     if remainder_count > 0
         remainder = order[(full_count * target_trials + 1):end]
         needed = target_trials - length(remainder)
@@ -147,6 +149,7 @@ function apply_chunk(data_time_trials, events, chunk)
         "Chunk contains indices outside 1:$(n_trials).",
     ))
 
+    # Apply the same trial slice to signal columns and event rows.
     events_df = DataFrame(events)
     return (
         data_time_trials = Matrix{Float32}(data_time_trials[:, indices]),
@@ -215,16 +218,19 @@ function prepare_augmented_image(
     reverse_sort = variant_flag(variant, :inverse_sort)
     inverse_polarity = variant_flag(variant, :inverse_polarity)
 
+    # Apply the variant sort direction before polarity and image processing.
     order = trial_sort_order(events, sort_variable; reverse = reverse_sort)
     data_sorted = sort_trials(data_time_trials, order)
     if inverse_polarity
         data_sorted = invert_polarity(data_sorted)
     end
 
+    # Convert the sorted signal into the ERP image representation.
     image = data_sorted |>
         zscore_timepoints |>
         trials_time_image
 
+    # Keep smoothing before resize so the kernel can use the source dimensions.
     if smooth
         image = smooth_image_for_target(image, target_size)
     end
@@ -251,9 +257,11 @@ Convert matching label rows into image metadata fields.
 """
 function label_metadata(label_rows)
     if nrow(label_rows) == 0
+        # Missing labels are valid and become unlabeled metadata.
         return (erp_class = missing, binary_label = missing)
     elseif nrow(label_rows) == 1
         erp_class = cellstring(label_rows.erp_class[1])
+        # Convert multiclass labels to the binary class/no-class convention.
         return (
             erp_class = erp_class,
             binary_label = erp_class == "no_class" ? 0 : 1,
@@ -294,12 +302,15 @@ function prepare_augmented_images(
 
     label_rows = labels_for(dataset_key, channel_name, sort_variable; data_root = data_root)
     label_info = label_metadata(label_rows)
+
+    # Build parent chunks before applying variant-level sort and polarity changes.
     parent_order = trial_sort_order(events_bundle.events, sort_variable)
     chunks = trial_chunks(parent_order, target_trials)
     variants = augmentation_variants()
 
     images = Matrix{Float32}[]
     rows = NamedTuple[]
+    # Materialize every chunk/variant pair and keep trace metadata beside it.
     for chunk in chunks
         chunked = apply_chunk(signal_bundle.data_time_trials, events_bundle.events, chunk)
         for (variant_index, variant) in enumerate(variants)

@@ -2,6 +2,26 @@
 
 Fixation-locked EEG and eye-tracking reference data.
 
+## Sort Variables
+
+The reference fixation dataset keeps the original event-column names. The
+available ERP-image sort variables are:
+
+- `duration`
+- `sac_amplitude`
+- `sac_endpos_x`
+- `sac_endpos_y`
+- `sac_startpos_x`
+- `sac_startpos_y`
+- `sac_vmax`
+- `fix_avgpos_x`
+- `fix_avgpos_y`
+- `fix_avgpupilsize`
+- `overlapping`
+- `fix_samebox`
+- `fix_type`
+- `latency`
+
 ## Source
 
 Gert, A. L., Ehinger, B. V., Timm, S., Kietzmann, T. C., & König, P. (2022).

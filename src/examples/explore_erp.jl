@@ -1,21 +1,24 @@
 # %%
 import Pkg
 
+# Activate the lightweight script environment and load the reusable helpers.
 const REPO_ROOT = normpath(joinpath(@__DIR__, "..", ".."))
 Pkg.activate(joinpath(REPO_ROOT, "scripts"))
 
-include(joinpath(REPO_ROOT, "src", "erp_data.jl"))
-include(joinpath(REPO_ROOT, "src", "erp_processing.jl"))
-include(joinpath(REPO_ROOT, "src", "erp_augmentation.jl"))
-include(joinpath(REPO_ROOT, "src", "erp_plot.jl"))
+include(joinpath(REPO_ROOT, "src", "erp_pipeline", "erp_data.jl"))
+include(joinpath(REPO_ROOT, "src", "erp_pipeline", "erp_processing.jl"))
+include(joinpath(REPO_ROOT, "src", "erp_pipeline", "erp_augmentation.jl"))
+include(joinpath(REPO_ROOT, "src", "erp_pipeline", "erp_plot.jl"))
 
 # %%
+# Show which dataset bundles are available.
 datasets = list_datasets()
 isempty(datasets) && error("No datasets found.")
 println("Available datasets:")
 println(join(datasets, "\n"))
 
 # %%
+# Choose a small, reproducible example combination.
 dataset_key = "fixations_dataset" in datasets ? "fixations_dataset" : first(datasets)
 channels = list_channels(dataset_key)
 sort_variables = list_sort_variables(dataset_key)
@@ -30,6 +33,7 @@ println("Selected channel: ", channel_name)
 println("Selected sort variable: ", sort_variable)
 
 # %%
+# Load the three stored parts of one dataset/channel combination.
 events_bundle = load_events(dataset_key)
 labels = load_labels(dataset_key)
 signal_bundle = load_signal(dataset_key, channel_name)
@@ -39,6 +43,7 @@ println("Labels rows: ", nrow(labels))
 println("Signal size: ", size(signal_bundle.data_time_trials))
 
 # %%
+# Run the processing steps explicitly in the same order as the source modules.
 trial_order = trial_sort_order(events_bundle.events, sort_variable)
 sorted_trials = sort_trials(signal_bundle.data_time_trials, trial_order)
 zscored_trials = zscore_timepoints(sorted_trials)
@@ -51,10 +56,12 @@ println("Smoothed image size: ", size(smoothed_image))
 println("Resized image size: ", size(resized_image))
 
 # %%
+# Plotting is kept separate from data loading and image processing.
 fig = plot_erp_image(dataset_key, channel_name, sort_variable)
 display(fig)
 
 # %%
+# Build model-ready augmented images from fixed-size trial chunks.
 target_trials = min(200, size(signal_bundle.data_time_trials, 2))
 augmented = prepare_augmented_images(
     dataset_key,

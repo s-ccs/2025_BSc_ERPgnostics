@@ -64,6 +64,36 @@ function tick_labels(values)
 end
 
 """
+    display_text(value)
+
+Format identifier-like values for plot titles.
+
+# Arguments
+- `value`: Value to display.
+
+# Returns
+- `String`: Human-readable text with underscores replaced by spaces.
+"""
+function display_text(value)
+    return replace(String(value), "_" => " ")
+end
+
+"""
+    display_class(value)
+
+Format ERP class names for plot titles.
+
+# Arguments
+- `value`: ERP class label.
+
+# Returns
+- `String`: Title-cased class label.
+"""
+function display_class(value)
+    return titlecase(display_text(value))
+end
+
+"""
     finite_values(image)
 
 Collect finite image values for color statistics.
@@ -75,11 +105,9 @@ Collect finite image values for color statistics.
 - `Vector{Float32}`: Finite values from `image`, or `[0f0]` for an empty finite set.
 """
 function finite_values(image)
-    values = Float32[]
-    for value in image
-        value32 = Float32(value)
-        isfinite(value32) && push!(values, value32)
-    end
+    values = vec(Float32.(image))
+    # Color statistics should ignore NaN and Inf values.
+    filter!(isfinite, values)
     isempty(values) && push!(values, 0f0)
     return values
 end
@@ -103,26 +131,17 @@ function make_diverging_cmap_zero_centered(vmin, vmax; n_steps = 64)
     vmax_value <= vmin_value && (vmax_value = vmin_value + 1e-6)
 
     source = cgrad(:RdBu, rev = true)
+    # Anchor the diverging colormap around zero even for asymmetric ranges.
     zero_position = clamp((0.0 - vmin_value) / (vmax_value - vmin_value), 0.02, 0.98)
     n_steps = max(2, Int(n_steps))
 
-    colors = Vector{Any}(undef, 2 * n_steps + 1)
-    positions = Vector{Float64}(undef, 2 * n_steps + 1)
+    left_source_positions = range(0.0, 0.5; length = n_steps + 1)
+    right_source_positions = range(0.5, 1.0; length = n_steps + 1)[2:end]
+    left_target_positions = range(0.0, zero_position; length = n_steps + 1)
+    right_target_positions = range(zero_position, 1.0; length = n_steps + 1)[2:end]
 
-    for index in 0:n_steps
-        source_position = 0.5 * index / n_steps
-        destination_position = zero_position * index / n_steps
-        colors[index + 1] = source[source_position]
-        positions[index + 1] = destination_position
-    end
-
-    for index in 1:n_steps
-        source_position = 0.5 + 0.5 * index / n_steps
-        destination_position = zero_position + (1.0 - zero_position) * index / n_steps
-        colors[n_steps + 1 + index] = source[source_position]
-        positions[n_steps + 1 + index] = destination_position
-    end
-
+    colors = [source[position] for position in [left_source_positions; right_source_positions]]
+    positions = collect([left_target_positions; right_target_positions])
     return cgrad(colors, positions)
 end
 
@@ -150,6 +169,7 @@ function clipped_color_stats_quantile_zero_ticks(image; q_low = 0.01, q_high = 0
 
     vmin = low
     vmax = high
+    # Keep zero visible whenever the data crosses or touches it.
     if all_nonnegative
         vmin = 0f0
         vmax = max(high, 1f-6)
@@ -161,6 +181,7 @@ function clipped_color_stats_quantile_zero_ticks(image; q_low = 0.01, q_high = 0
         vmax = max(high, 0f0)
     end
 
+    # Expand degenerate ranges so Makie receives a valid color interval.
     if vmax <= vmin
         delta = max(abs(vmin), abs(vmax), 1f0) * 1f-6
         vmin -= delta
@@ -195,30 +216,6 @@ function clipped_color_stats_quantile_zero_ticks(image; q_low = 0.01, q_high = 0
 end
 
 """
-    image_time_axis(metadata, n_timepoints)
-
-Build x-axis coordinates for plotting an ERP image.
-
-# Arguments
-- `metadata`: Dataset metadata, ideally containing `time_start_s` and `time_end_s`.
-- `n_timepoints`: Number of image columns to plot.
-
-# Returns
-- `Tuple`: `(values, label)` where `values` is a vector of x-axis coordinates and
-  `label` is the axis label.
-"""
-function image_time_axis(metadata, n_timepoints)
-    has_start = metadata isa AbstractDict && haskey(metadata, "time_start_s")
-    has_end = metadata isa AbstractDict && haskey(metadata, "time_end_s")
-    if has_start && has_end
-        start_s = Float64(metadata["time_start_s"])
-        end_s = Float64(metadata["time_end_s"])
-        return collect(range(start_s, end_s; length = n_timepoints)), "time [s]"
-    end
-    return collect(1:n_timepoints), "timepoint"
-end
-
-"""
     class_label(dataset_key, channel_name, sort_variable, data_root)
 
 Read the ERP class label used in the plot title.
@@ -239,6 +236,30 @@ function class_label(dataset_key, channel_name, sort_variable, data_root)
 end
 
 """
+    erp_plot_title(dataset_label, channel_name, sort_variable, erp_class)
+
+Build the compact Week-23-style ERP image title.
+
+# Arguments
+- `dataset_label`: Readable dataset label.
+- `channel_name`: Channel signal file name without `.jld2`.
+- `sort_variable`: Event column used for sorting.
+- `erp_class`: ERP class label or `"unlabeled"`.
+
+# Returns
+- `String`: Multi-line plot title.
+"""
+function erp_plot_title(dataset_label, channel_name, sort_variable, erp_class)
+    return @sprintf(
+        "%s\n%s\nch=%s | sort=%s",
+        display_class(erp_class),
+        String(dataset_label),
+        String(channel_name),
+        display_text(sort_variable),
+    )
+end
+
+"""
     plot_erp_image(dataset_key, channel_name, sort_variable; data_root=default_data_root(), smooth=true, resize=false)
 
 Load, process, and plot one ERP image as a CairoMakie heatmap.
@@ -252,7 +273,6 @@ Load, process, and plot one ERP image as a CairoMakie heatmap.
 - `resize`: Resize the plotted image to `(64, 64)` when `true`.
 - `figure_kwargs`: Keyword arguments forwarded to `CairoMakie.Figure`.
 - `colormap_quantile`: Upper quantile used for the Week-25 style colorbar.
-- `time_unit`: `:seconds` or `:milliseconds` for the bottom x-axis.
 
 # Returns
 - `CairoMakie.Figure`: Figure containing the ERP heatmap and quantile-clipped
@@ -265,9 +285,8 @@ function plot_erp_image(
         data_root = default_data_root(),
         smooth = true,
         resize = false,
-        figure_kwargs = (size = (980, 680),),
-        colormap_quantile = 0.99,
-        time_unit = :seconds)
+        figure_kwargs = (size = (900, 650),),
+        colormap_quantile = 0.99)
 
     events_bundle = load_events(dataset_key; data_root = data_root)
     signal_bundle = load_signal(dataset_key, channel_name; data_root = data_root)
@@ -275,6 +294,7 @@ function plot_erp_image(
         "Signal trial count does not match events row count for $(dataset_key), channel $(channel_name).",
     ))
 
+    # Keep plot data preparation in the same explicit order as the processing module.
     order = trial_sort_order(events_bundle.events, sort_variable)
     sorted_trials = sort_trials(signal_bundle.data_time_trials, order)
     image = sorted_trials |>
@@ -289,62 +309,42 @@ function plot_erp_image(
     end
 
     n_trials, n_timepoints = size(image)
-    time_values, time_label = image_time_axis(events_bundle.metadata, n_timepoints)
-    if Symbol(time_unit) == :milliseconds && time_label == "time [s]"
-        time_values = time_values .* 1000.0
-        time_label = "time [ms]"
-    elseif !(Symbol(time_unit) in (:seconds, :milliseconds))
-        throw(ArgumentError("time_unit must be :seconds or :milliseconds."))
-    end
+    timepoint_values = collect(1:n_timepoints)
     dataset_label = metadata_value(events_bundle.metadata, "dataset_label", String(dataset_key))
     erp_class = class_label(dataset_key, channel_name, sort_variable, data_root)
+
+    # Clip colors by quantile so outliers do not dominate the heatmap.
     color_stats = clipped_color_stats_quantile_zero_ticks(
         image;
         q_low = Float64(1 - colormap_quantile),
         q_high = Float64(colormap_quantile),
     )
-    time_tick_indices = axis_triplet(n_timepoints)
-    time_tick_positions = time_values[time_tick_indices]
-    time_tick_labels = tick_labels(time_tick_positions)
-    timepoint_tick_labels = string.(time_tick_indices)
+    timepoint_tick_values = axis_triplet(n_timepoints)
+    x_ticks = (timepoint_tick_values, string.(timepoint_tick_values))
     y_tick_values = axis_triplet(n_trials)
+    y_ticks = (y_tick_values, string.(y_tick_values))
 
-    fig_kwargs = merge((size = (980, 680), figure_padding = (18, 28, 16, 14)), NamedTuple(figure_kwargs))
+    fig_kwargs = merge((size = (900, 650), figure_padding = 24), NamedTuple(figure_kwargs))
     fig = Figure(; fig_kwargs...)
-    title = string(
-        dataset_label,
-        " | channel ",
-        channel_name,
-        "\n",
-        "sort by ",
-        sort_variable,
-        " | class: ",
-        erp_class,
-    )
-    Label(fig[0, 1:2], title;
-        fontsize = 17,
-        font = :bold,
-        tellwidth = false,
-        padding = (0, 0, 0, 8),
-    )
-
     ax = Axis(
         fig[1, 1];
-        xlabel = time_label,
-        ylabel = "trial (sorted by $(sort_variable))",
-        xticks = (time_tick_positions, time_tick_labels),
-        yticks = y_tick_values,
-        xlabelpadding = 8,
-        ylabelpadding = 8,
-        xticklabelpad = 4,
-        yticklabelpad = 4,
+        title = erp_plot_title(dataset_label, channel_name, sort_variable, erp_class),
+        titlesize = 26,
+        xlabel = "timepoint",
+        ylabel = "sorted trials",
+        xticks = x_ticks,
+        yticks = y_ticks,
+        xlabelsize = 18,
+        ylabelsize = 18,
+        xticklabelsize = 14,
+        yticklabelsize = 14,
     )
-    xlims!(ax, first(time_values), last(time_values))
+    xlims!(ax, first(timepoint_values), last(timepoint_values))
     ylims!(ax, 1, n_trials)
 
     heatmap_plot = heatmap!(
         ax,
-        time_values,
+        timepoint_values,
         1:n_trials,
         permutedims(color_stats.clipped, (2, 1));
         colormap = color_stats.colormap,
@@ -352,29 +352,12 @@ function plot_erp_image(
         rasterize = true,
     )
 
-    top_axis = Axis(fig[1, 1];
-        xaxisposition = :top,
-        yaxisposition = :right,
-        xlabel = "timepoint",
-        xticks = (time_tick_positions, timepoint_tick_labels),
-        backgroundcolor = (:white, 0.0),
-        xlabelpadding = 8,
-        xticklabelpad = 4,
-    )
-    linkxaxes!(ax, top_axis)
-    xlims!(top_axis, first(time_values), last(time_values))
-    hideydecorations!(top_axis)
-    hidespines!(top_axis, :l, :r, :b)
-    top_axis.ygridvisible = false
-    top_axis.xgridvisible = false
-
     Colorbar(fig[1, 2], heatmap_plot;
-        label = "amplitude (z)",
         ticks = (color_stats.tick_values, color_stats.tick_labels),
-        width = 14,
+        ticklabelsize = 14,
+        width = 18,
     )
-    colgap!(fig.layout, 12)
-    rowgap!(fig.layout, 8)
+    colgap!(fig.layout, 14)
     resize_to_layout!(fig)
     return fig
 end

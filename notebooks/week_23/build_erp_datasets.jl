@@ -241,18 +241,6 @@ function cell_string(x)
 end
 
 function normalize_reference_sort_variables!(df::DataFrame)
-    has_reference_rt = any(
-        (cell_string(row.dataset_key) == REFERENCE_DATASET_KEY) &&
-        (cell_string(row.sort_variable) == "rt_ms")
-        for row in eachrow(df)
-    )
-    has_reference_rt && return df
-
-    for row in eachrow(df)
-        if cell_string(row.dataset_key) == REFERENCE_DATASET_KEY && cell_string(row.sort_variable) == "latency"
-            row.sort_variable = "rt_ms"
-        end
-    end
     return df
 end
 
@@ -451,9 +439,6 @@ function load_reference_events()
     events = CSV.read(REFERENCE_EVENTS_PATH, DataFrame)
     events.subject_label = fill("reference_fixations", nrow(events))
     events.epoch_index = collect(1:nrow(events))
-    if :latency in propertynames(events) && !(:rt_ms in propertynames(events))
-        events.rt_ms = copy(events.latency)
-    end
     order = canonical_trial_order(events)
     return events[order, :]
 end

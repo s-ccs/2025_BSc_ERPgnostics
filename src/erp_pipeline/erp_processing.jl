@@ -47,11 +47,14 @@ Compute the trial index order from an event column without filtering rows.
 function trial_sort_order(events, sort_variable; reverse = false)
     events_df = DataFrame(events)
     column = sort_column_name(events_df, sort_variable)
+
+    # Keep the original row index so sorting returns trial positions.
     order_df = DataFrame(
         row_index = collect(1:nrow(events_df)),
         sort_value = events_df[!, column],
     )
 
+    # Use the row index as a stable tie-breaker for equal sort values.
     try
         sort!(order_df, [:sort_value, :row_index]; rev = [Bool(reverse), false])
     catch err
@@ -104,6 +107,8 @@ Z-score each timepoint across trials.
 function zscore_timepoints(data_time_trials)
     data = Float32.(data_time_trials)
     mean_value, std_value = mean_and_std(data, 2; corrected = true)
+
+    # Replace zero or non-finite standard deviations before calling zscore.
     std_safe = map(std_value) do value
         value32 = Float32(value)
         isfinite(value32) && value32 > 0f0 ? value32 : 1f0
@@ -132,7 +137,7 @@ end
 Create a 2D Gaussian kernel scaled from source image size to target image size.
 
 # Arguments
-- `sigma_factor`: Project smoothing factor.
+- `sigma_factor`: Smoothing factor.
 - `in_size`: Input image size as `(trials, timepoints)`.
 - `target_size`: Target image size used to scale sigma per axis.
 - `kernel_size`: Odd kernel dimensions, for example `(21, 21)`.
@@ -148,6 +153,7 @@ function gaussian_kernel_for_target(sigma_factor, in_size, target_size, kernel_s
     target_size = Tuple(Int.(target_size))
     all(isodd, kernel_size) || throw(ArgumentError("kernel_size must be odd in both dimensions, got $(kernel_size)."))
 
+    # Scale sigma so smoothing strength stays comparable after resizing.
     sigma_trials = max(Float32(sigma_factor) * Float32(in_size[1]) / Float32(target_size[1]), 1f-3)
     sigma_time = max(Float32(sigma_factor) * Float32(in_size[2]) / Float32(target_size[2]), 1f-3)
     return KernelFactors.gaussian((sigma_trials, sigma_time), kernel_size)
@@ -161,7 +167,7 @@ Apply Gaussian smoothing while scaling sigma for a later resize target.
 # Arguments
 - `image`: ERP image in `trials x timepoints` layout.
 - `target_size`: Final target size used for sigma scaling.
-- `sigma_factor`: Project smoothing factor.
+- `sigma_factor`: Smoothing factor.
 - `kernel_size`: Odd Gaussian kernel dimensions.
 - `border`: ImageFiltering border handling mode.
 
@@ -170,6 +176,8 @@ Apply Gaussian smoothing while scaling sigma for a later resize target.
 """
 function smooth_image_for_target(image, target_size; sigma_factor = 75f0, kernel_size = (21, 21), border = "reflect")
     image32 = Float32.(image)
+
+    # Degenerate images cannot support a meaningful two-dimensional kernel.
     min(size(image32)...) <= 1 && return Matrix{Float32}(image32)
 
     kernel = gaussian_kernel_for_target(sigma_factor, size(image32), target_size, kernel_size)
@@ -179,11 +187,11 @@ end
 """
     smooth_image(image; sigma_factor=75f0, kernel_size=(21, 21), border="reflect")
 
-Apply the default project Gaussian smoothing to an ERP image.
+Apply the default Gaussian smoothing to an ERP image.
 
 # Arguments
 - `image`: ERP image in `trials x timepoints` layout.
-- `sigma_factor`: Project smoothing factor.
+- `sigma_factor`: Smoothing factor.
 - `kernel_size`: Odd Gaussian kernel dimensions.
 - `border`: ImageFiltering border handling mode.
 
@@ -214,6 +222,7 @@ Resize an ERP image to the model-ready target size.
 - `Matrix{Float32}`: Resized image with size `target_size`.
 """
 function resize_image(image; target_size = DEFAULT_IMAGE_TARGET_SIZE, method = Linear())
+    # Normalize target dimensions before handing them to ImageTransformations.
     target_size = Tuple(Int.(target_size))
     return Matrix{Float32}(imresize(Float32.(image), target_size; method = method))
 end

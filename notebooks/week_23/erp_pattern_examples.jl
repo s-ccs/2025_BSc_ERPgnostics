@@ -166,11 +166,6 @@ function stable_slug(x)
 end
 
 function normalize_reference_sort_variables!(df::DataFrame)
-    for row in eachrow(df)
-        if cellstr(row.dataset_key) == REFERENCE_DATASET_KEY && cellstr(row.sort_variable) == "latency"
-            row.sort_variable = "rt_ms"
-        end
-    end
     return df
 end
 
@@ -357,9 +352,6 @@ function load_reference_events()
     end
     if !(:epoch_index in propertynames(events))
         events.epoch_index = collect(1:nrow(events))
-    end
-    if :latency in propertynames(events) && !(:rt_ms in propertynames(events))
-        events.rt_ms = copy(events.latency)
     end
     return events
 end
