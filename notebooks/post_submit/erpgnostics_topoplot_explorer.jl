@@ -70,6 +70,9 @@ const REFERENCE_POSITIONS_PATH = joinpath(
 const DETAIL_LOWPASS_SIGMA = 75.0f0
 const DETAIL_LOWPASS_KERNEL_SIZE = (21, 21)
 const DETAIL_FILTER_BORDER = "reflect"
+const TOPOPLOT_CENTER = (0.5, 0.5)
+const TOPOPLOT_SAFE_RADIUS = 0.47
+const TOPOPLOT_MIN_DISTANCE = 0.055
 
 cellstr(x) = (ismissing(x) || x === nothing) ? "" : string(x)
 
@@ -169,15 +172,16 @@ function normalize_parent_scores(raw::DataFrame)
         dataset_key = cellstr(row[dataset_col])
         sort_variable = cellstr(row[sort_col])
         channel_name = cellstr(row[channel_col])
-        manual_label = manual_col === nothing ? "unlabelled" : cellstr(row[manual_col])
-        isempty(manual_label) && (manual_label = "unlabelled")
+        manual_label = manual_col === nothing ? "unlabeled" : cellstr(row[manual_col])
+        isempty(manual_label) && (manual_label = "unlabeled")
+        manual_label == "unlabelled" && (manual_label = "unlabeled")
         has_manual = has_manual_col === nothing ?
-            !(manual_label in ("", "unlabelled")) :
+            !(manual_label in ("", "unlabeled", "unlabelled")) :
             (row[has_manual_col] === true || lowercase(cellstr(row[has_manual_col])) in ("true", "1", "yes"))
         idx = channel_idx_col === nothing ?
             channel_index(dataset_key, channel_name) :
             Int(row[channel_idx_col])
-        binary = manual_label in ("", "unlabelled", "no_class") ? 0 : 1
+        binary = manual_label in ("", "unlabeled", "unlabelled", "no_class") ? 0 : 1
 
         push!(rows, (
             dataset_key = dataset_key,
@@ -281,6 +285,72 @@ function load_reference_positions()
         ))
     end
     return DataFrame(rows)
+end
+
+function project_to_topoplot_circle(x::Real, y::Real; radius::Float64 = TOPOPLOT_SAFE_RADIUS)
+    cx, cy = TOPOPLOT_CENTER
+    xf, yf = Float64(x), Float64(y)
+    (isfinite(xf) && isfinite(yf)) || return cx, cy
+
+    dx, dy = xf - cx, yf - cy
+    r = hypot(dx, dy)
+    (r <= radius || r == 0.0) && return xf, yf
+    scale = radius / r
+    return cx + dx * scale, cy + dy * scale
+end
+
+function clamp_topoplot_positions!(xs::Vector{Float64}, ys::Vector{Float64};
+        radius::Float64 = TOPOPLOT_SAFE_RADIUS)
+    for i in eachindex(xs)
+        xs[i], ys[i] = project_to_topoplot_circle(xs[i], ys[i]; radius = radius)
+    end
+    return xs, ys
+end
+
+function relax_topoplot_positions!(xs::Vector{Float64}, ys::Vector{Float64};
+        min_distance::Float64 = TOPOPLOT_MIN_DISTANCE,
+        radius::Float64 = TOPOPLOT_SAFE_RADIUS,
+        iterations::Int = 120)
+    n = length(xs)
+    n <= 1 && return xs, ys
+
+    for _ in 1:iterations
+        moved = false
+        for i in 1:(n - 1), j in (i + 1):n
+            dx, dy = xs[i] - xs[j], ys[i] - ys[j]
+            d = hypot(dx, dy)
+            d >= min_distance && continue
+
+            if d < 1e-9
+                theta = 2pi * (0.61803398875 * i + 0.41421356237 * j)
+                ux, uy = cos(theta), sin(theta)
+                d = 0.0
+            else
+                ux, uy = dx / d, dy / d
+            end
+
+            shift = 0.5 * (min_distance - d)
+            xs[i] += ux * shift
+            ys[i] += uy * shift
+            xs[j] -= ux * shift
+            ys[j] -= uy * shift
+            moved = true
+        end
+        clamp_topoplot_positions!(xs, ys; radius = radius)
+        moved || break
+    end
+    return xs, ys
+end
+
+function topoplot_layout_positions(positions::DataFrame)
+    out = copy(positions)
+    xs = Float64.(out.x)
+    ys = Float64.(out.y)
+    clamp_topoplot_positions!(xs, ys)
+    relax_topoplot_positions!(xs, ys)
+    out.x = xs
+    out.y = ys
+    return out
 end
 
 function side_x(suffix::AbstractString)
@@ -400,10 +470,12 @@ function standard_or_synthetic_channel_positions(channels::DataFrame)
 end
 
 function load_dataset_positions(dataset_key::AbstractString)
-    if String(dataset_key) == REFERENCE_DATASET_KEY && isfile(REFERENCE_POSITIONS_PATH)
-        return load_reference_positions()
+    positions = if String(dataset_key) == REFERENCE_DATASET_KEY && isfile(REFERENCE_POSITIONS_PATH)
+        load_reference_positions()
+    else
+        standard_or_synthetic_channel_positions(dataset_channels(dataset_key))
     end
-    return standard_or_synthetic_channel_positions(dataset_channels(dataset_key))
+    return topoplot_layout_positions(positions)
 end
 
 function draw_head_outline!(ax)
@@ -440,7 +512,7 @@ function score_positions(score_df::DataFrame, dataset_key::AbstractString, sort_
     out = leftjoin(positions, sub; on = [:dataset_key, :channel_name, :channel_idx])
     out.score_class = coalesce.(out.score_class, 0.0f0)
     out.true_binary_label = coalesce.(out.true_binary_label, 0)
-    out.true_erp_class = coalesce.(out.true_erp_class, "unlabelled")
+    out.true_erp_class = coalesce.(out.true_erp_class, "unlabeled")
     out.has_manual_label = coalesce.(out.has_manual_label, false)
     sort!(out, [:channel_idx, :channel_name])
     return out
@@ -457,7 +529,11 @@ function score_row(score_df::DataFrame, dataset_key::AbstractString, sort_variab
     return score_df[idx, :]
 end
 
-display_class_label(label) = replace(isempty(cellstr(label)) ? "unlabelled" : cellstr(label), "_" => " ")
+function display_class_label(label)
+    value = cellstr(label)
+    (isempty(value) || value == "unlabelled") && (value = "unlabeled")
+    return replace(value, "_" => " ")
+end
 
 function is_valid_sort_value(v)
     (ismissing(v) || v === nothing) && return false
@@ -675,14 +751,12 @@ function post_submit_erpgnostics_explorer(;
         valid_channel(ds, sv, ch)
     end
 
-    positions_obs = lift(ds -> load_dataset_positions(ds), selected_dataset)
     topo_df_obs = lift(selected_dataset, valid_sort_obs) do ds, sv
         score_positions(score_df, ds, sv)
     end
     topo_x = lift(df -> Float64.(df.x), topo_df_obs)
     topo_y = lift(df -> Float64.(df.y), topo_df_obs)
     topo_score = lift(df -> Float32.(df.score_class), topo_df_obs)
-    topo_labels = lift(df -> String.(df.channel_name), topo_df_obs)
 
     detail_obs = lift(selected_dataset, valid_sort_obs, valid_channel_obs) do ds, sv, ch
         dataset_detail_interactive(ds, sv, ch)
@@ -700,7 +774,7 @@ function post_submit_erpgnostics_explorer(;
 
     title_obs = lift(selected_dataset, valid_sort_obs, valid_channel_obs) do ds, sv, ch
         row = score_row(score_df, ds, sv, ch)
-        row === nothing && return "unlabelled | score missing"
+        row === nothing && return "unlabeled | score missing"
         return @sprintf("%s | model score %.3f", display_class_label(row.true_erp_class), Float64(row.score_class))
     end
 
@@ -827,25 +901,14 @@ function post_submit_erpgnostics_explorer(;
         colormap = :viridis,
         colorrange = (0.0f0, 1.0f0),
         markersize = 16,
-        strokewidth = 0.4,
-        strokecolor = :gray15,
-        inspectable = false,
-    )
-    text!(
-        ax_topo,
-        topo_x,
-        topo_y;
-        text = topo_labels,
-        align = (:center, :center),
-        fontsize = 7,
-        color = :white,
+        strokewidth = 0,
         inspectable = false,
     )
     Colorbar(fig[9, 1], topo_scatter; label = "P(pattern)", vertical = false, width = GLMakie.Relative(0.90))
 
     on(events(ax_topo.scene).mousebutton, priority = 20) do event
         if event.button == Mouse.left && event.action == Mouse.press && is_mouseinside(ax_topo.scene)
-            positions = positions_obs[]
+            positions = topo_df_obs[]
             idx = closest_channel_index(mouseposition(ax_topo.scene), positions)
             channel_name = cellstr(positions.channel_name[idx])
             set_channel!(channel_name)

@@ -1,21 +1,30 @@
 # train_cv.jl
 #
-# 5-fold cross validation over the labelled augmented samples.
+# 5-fold cross validation over the labeled augmented samples.
 #
 # Folds are assigned per pattern class and per parent chunk so that the four
 # augmentations of one parent land in different folds where possible (matching
 # the Week-23/24 validation policy). Each fold trains a fresh pretrained
 # ResNet18 on its training split and predicts its validation split. The union of
 # all validation predictions gives an out-of-fold (OOF) prob_class for every
-# labelled augmentation. Parent OOF scores (aggregated later) are the mean of a
+# labeled augmentation. Parent OOF scores (aggregated later) are the mean of a
 # parent's augmentation OOF scores, even though those augmentations come from
 # different folds.
 
 """
-    assign_stratified_folds!(sample_df; k=K_FOLDS)
+    assign_stratified_folds!(sample_df; k=K_FOLDS) -> sample_df
 
-Adds a `fold` column. Keeps augmentation variants of a parent chunk in distinct
-folds and balances class/augmentation counts across folds.
+Add a `fold` column to `sample_df` (mutating it in place).
+
+# Arguments
+- `sample_df::DataFrame`: materialised samples from
+  [`materialize_augmented_samples`](@ref).
+- `k::Int=K_FOLDS`: number of folds (must be `>= length(AUGMENTATION_VARIANTS)`).
+
+# Behavior
+Keeps the augmentation variants of one parent chunk in distinct folds where
+possible and balances class/augmentation counts across folds. Randomised via
+`time_ns()`. Errors if any sample stays unassigned.
 """
 function assign_stratified_folds!(sample_df::DataFrame; k::Int = K_FOLDS)
     k >= length(AUGMENTATION_VARIANTS) || error("k must be >= $(length(AUGMENTATION_VARIANTS)).")
@@ -75,10 +84,11 @@ function assign_stratified_folds!(sample_df::DataFrame; k::Int = K_FOLDS)
 end
 
 """
-    oof_prediction_rows(sample_df, idxs, fold, probs)
+    oof_prediction_rows(sample_df, idxs, fold, probs) -> Vector{NamedTuple}
 
-Build out-of-fold augmentation-level prediction rows for one fold's validation
-set.
+Build the out-of-fold augmentation-level prediction rows for one fold's
+validation set: for each `idxs[j]`, copy the sample's identity columns and attach
+`prob_no_class`/`prob_class` from `probs[:, j]`.
 """
 function oof_prediction_rows(sample_df::DataFrame, idxs::Vector{Int}, fold::Int, probs::AbstractMatrix)
     rows = NamedTuple[]
@@ -107,10 +117,23 @@ function oof_prediction_rows(sample_df::DataFrame, idxs::Vector{Int}, fold::Int,
 end
 
 """
-    run_cross_validation(sample_df; nepochs, lr) -> (oof_df, metrics_df)
+    run_cross_validation(sample_df; nepochs=TRAIN_EPOCHS, lr=TRAIN_LR) -> (oof_df, metrics_df)
 
-Train one ResNet18 per fold and collect OOF augmentation predictions plus
-per-fold metrics. `sample_df` must already carry a `fold` column.
+Run the labeled-data cross validation.
+
+# Arguments
+- `sample_df::DataFrame`: materialised samples that already carry a `fold` column
+  (call [`assign_stratified_folds!`](@ref) first).
+- `nepochs`, `lr`: training schedule per fold.
+
+# Returns
+- `oof_df::DataFrame`: out-of-fold augmentation predictions (one row per
+  validation image, with `prob_class`), pooled across all folds.
+- `metrics_df::DataFrame`: one row per fold with train/val accuracy and timing.
+
+# Behavior
+Trains a fresh [`build_pretrained_resnet18`](@ref) per fold (no cross-fold
+leakage) and frees the GPU between folds.
 """
 function run_cross_validation(sample_df::DataFrame;
         nepochs::Int = TRAIN_EPOCHS, lr::Float32 = TRAIN_LR)

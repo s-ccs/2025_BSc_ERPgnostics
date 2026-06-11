@@ -1,7 +1,7 @@
 # augmentation.jl
 #
 # The single, shared augmentation used everywhere in the pipeline:
-#   labelled training data, CV validation data, and new/unlabelled ERP images
+#   labeled training data, CV validation data, and unlabeled ERP images
 #   are all preprocessed identically. This guarantees that a parent score is
 #   always the mean over the same four sort/polarity variants of the same
 #   Gaussian-reference pipeline.
@@ -15,17 +15,20 @@
 # --------------------------------------------------------------------------- #
 # Sort handling
 # --------------------------------------------------------------------------- #
+"True when `v` is a usable sort value (a finite real, or a non-empty string)."
 function is_valid_sort_value(v)
     (ismissing(v) || v === nothing) && return false
     v isa Real && return isfinite(Float64(v))
     return !isempty(strip(string(v)))
 end
 
+"Boolean mask over the trials of `events` whose `sort_col` value is usable."
 function valid_sort_mask(events::DataFrame, sort_col::Symbol)
     sort_col in propertynames(events) || error("Sort column $(sort_col) missing.")
     return [is_valid_sort_value(v) for v in events[!, sort_col]]
 end
 
+"The `sort_col` column as numbers when all values are real, otherwise as strings."
 function sortvalues_from(events::DataFrame, sort_col::Symbol)
     values = events[!, sort_col]
     finite_values = collect(skipmissing(values))
@@ -33,6 +36,13 @@ function sortvalues_from(events::DataFrame, sort_col::Symbol)
     return string.(values)
 end
 
+"""
+    sorted_order_for_variant(events, sort_col; inverse_sort=false) -> Vector{Int}
+
+Trial indices ordered by `sort_col` (ascending, or descending when
+`inverse_sort` is true). This is the ordering that defines the ERP image's
+trial axis.
+"""
 function sorted_order_for_variant(events::DataFrame, sort_col::Symbol; inverse_sort::Bool = false)
     order = sortperm(sortvalues_from(events, sort_col))
     inverse_sort && reverse!(order)
@@ -42,6 +52,13 @@ end
 # --------------------------------------------------------------------------- #
 # Fixed-trial chunking
 # --------------------------------------------------------------------------- #
+"""
+    fill_remainder_indices(order, remainder_idxs, target_trials) -> Vector{Int}
+
+Random unique trial indices (seeded by `time_ns()`) that pad the remainder chunk
+from `length(remainder_idxs)` up to `target_trials`. Returns an empty vector when
+no padding is needed.
+"""
 function fill_remainder_indices(order::Vector{Int}, remainder_idxs::Vector{Int}, target_trials::Int)
     needed = target_trials - length(remainder_idxs)
     needed <= 0 && return Int[]
@@ -54,11 +71,23 @@ function fill_remainder_indices(order::Vector{Int}, remainder_idxs::Vector{Int},
 end
 
 """
-    target_trial_mod_chunks(order, target_trials)
+    target_trial_mod_chunks(order, target_trials) -> Vector{NamedTuple}
 
-Distribute `order` (sorted trial indices) into fixed-size chunks of
-`target_trials` trials. Full chunks are filled round-robin so each preserves the
-global sort gradient; a final remainder chunk is filled.
+Trial slicing: split the sorted trial indices into fixed-size chunks.
+
+# Arguments
+- `order::Vector{Int}`: trial indices already sorted by the chosen variable.
+- `target_trials::Int`: number of trials per slice (`n` in the thesis).
+
+# Returns
+- `Vector{NamedTuple}`, one per chunk, each with `chunk_index`, `chunk_count`,
+  `chunk_role`, `reused_fill_count`, and `trial_indices`. There are
+  `floor(N / target_trials) + (remainder > 0)` chunks; the full chunks are
+  filled round-robin so each spans the whole sort gradient, and a final remainder
+  chunk is padded to `target_trials` (see [`fill_remainder_indices`](@ref)).
+
+# Behavior
+Errors when `target_trials <= 0` or fewer than `target_trials` trials are given.
 """
 function target_trial_mod_chunks(order::Vector{Int}, target_trials::Int)
     n = length(order)
@@ -117,8 +146,8 @@ end
     chunk_parent_image_id(dataset_key, channel_name, sort_variable, chunk, target_trials) -> String
 
 Stable id for one trial slice, e.g. `dataset::channel::sort::modtarget_0200_part003`
-(remainder slices also encode their fill count). Shared by labelled
-materialisation and unlabelled scoring so both use the same parent ids.
+(remainder slices also encode their fill count). Shared by labeled
+materialisation and unlabeled scoring so both use the same parent ids.
 """
 function chunk_parent_image_id(dataset_key, channel_name, sort_variable, chunk, target_trials::Int)
     mod_variant = chunk.reused_fill_count == 0 ?
@@ -142,6 +171,13 @@ end
 # --------------------------------------------------------------------------- #
 # Image preprocessing (the shared augmentation core)
 # --------------------------------------------------------------------------- #
+"""
+    zscore_timepoints_local(data_time_trials) -> Matrix{Float32}
+
+Z-score each timepoint (row) of a `(time, trials)` matrix across its trials,
+guarding against zero variance on flat timepoints. Equivalent to the project's
+`ERPImageUtils.zscore_timepoints`, kept local to avoid a cross-module call.
+"""
 function zscore_timepoints_local(data_time_trials::AbstractMatrix)
     x = Float32.(data_time_trials)
     mu = mean(x; dims = 2)
@@ -151,6 +187,14 @@ function zscore_timepoints_local(data_time_trials::AbstractMatrix)
     return Float32.((x .- Float32.(mu)) ./ sigma_safe)
 end
 
+"""
+    pre_resize_augmented_image(data_time_trials, events, sort_col;
+                               inverse_sort, inverse_polarity) -> Matrix{Float32}
+
+Apply one augmentation variant to a raw `(time, trials)` chunk and return the
+pre-resize `(trials, time)` image: order trials by `sort_col` (optionally
+reversed), optionally flip polarity, then z-score per timepoint.
+"""
 function pre_resize_augmented_image(data_time_trials::AbstractMatrix, events::DataFrame, sort_col::Symbol;
         inverse_sort::Bool, inverse_polarity::Bool)
     size(data_time_trials, 2) == nrow(events) || error("Trial count mismatch between signal and events.")
@@ -162,10 +206,21 @@ function pre_resize_augmented_image(data_time_trials::AbstractMatrix, events::Da
 end
 
 """
-    preprocess_model_image(data_time_trials, events, sort_col, augmentation)
-        -> Matrix{Float32}
+    preprocess_model_image(data_time_trials, events, sort_col, augmentation) -> Matrix{Float32}
 
-Produce the final TARGET_SIZE model image for one augmentation of one ERP chunk.
+Produce the final model image for one augmentation of one ERP chunk: the
+[`pre_resize_augmented_image`](@ref) followed by Gaussian-reference smoothing and
+a resize to `TARGET_SIZE`.
+
+# Arguments
+- `data_time_trials::AbstractMatrix`: raw `(time, trials)` chunk.
+- `events::DataFrame`: events for those trials (same column count).
+- `sort_col::Symbol`: the sort variable.
+- `augmentation`: a `NamedTuple` with `inverse_sort` and `inverse_polarity` flags
+  (an entry of [`AUGMENTATION_VARIANTS`](@ref)).
+
+# Returns
+- `Matrix{Float32}` of size `TARGET_SIZE`, ready for [`images_to_tensor`](@ref).
 """
 function preprocess_model_image(data_time_trials::AbstractMatrix, events::DataFrame, sort_col::Symbol, augmentation)
     img_trials_time = pre_resize_augmented_image(
@@ -187,10 +242,18 @@ end
 # Origins
 # --------------------------------------------------------------------------- #
 """
-    origin_for_label(row, ctx)
+    origin_for_label(row, ctx) -> NamedTuple
 
-Load the events + single-channel signal matrix for a (dataset, channel) row,
-trimmed to the common trial count.
+Load the raw material for one ERP image.
+
+# Arguments
+- `row`: anything with `dataset_key` and `channel_name` fields.
+- `ctx`: a [`build_data_context`](@ref) cache.
+
+# Returns
+A `NamedTuple` `(events, metadata, data_time_trials, channel_idx, n_trials,
+n_timepoints)` with events and the single-channel signal trimmed to their common
+trial count.
 """
 function origin_for_label(row, ctx)
     dataset_key = cellstr(row.dataset_key)
@@ -209,9 +272,10 @@ function origin_for_label(row, ctx)
 end
 
 """
-    filtered_origin_for_sort(origin, sort_col)
+    filtered_origin_for_sort(origin, sort_col) -> NamedTuple
 
-Drop trials whose sort value is missing/non-finite/empty for `sort_col`.
+Return a copy of `origin` keeping only trials whose `sort_col` value is usable
+(see [`is_valid_sort_value`](@ref)). Errors if no trial qualifies.
 """
 function filtered_origin_for_sort(origin, sort_col::Symbol)
     keep = valid_sort_mask(origin.events, sort_col)
@@ -227,15 +291,29 @@ function filtered_origin_for_sort(origin, sort_col::Symbol)
 end
 
 # --------------------------------------------------------------------------- #
-# Materialize labelled training samples
+# Materialize labeled training samples
 # --------------------------------------------------------------------------- #
 """
-    materialize_augmented_samples(labels, ctx; target_trials=TARGET_TRIALS)
+    materialize_augmented_samples(labels, ctx; target_trials=TARGET_TRIALS) -> NamedTuple
 
-Turn every labelled (dataset, channel, sort) row into fixed-trial chunks and the
-four augmentations of each kept chunk. Returns `(sample_df, skipped_df)` where
-`sample_df.processed_img` holds the model images and each row carries the chunk
-`parent_image_id` shared by its four augmentations.
+Build the labeled training set: trial-slice every labeled origin and apply the
+four augmentation variants.
+
+# Arguments
+- `labels::DataFrame`: the label pool (see [`load_all_real_labels`](@ref)).
+- `ctx`: a [`build_data_context`](@ref) cache.
+- `target_trials::Int=TARGET_TRIALS`: slice size.
+
+# Returns
+A `NamedTuple` `(sample_df, skipped_df)`. `sample_df` has one row per
+augmentation image, with `sample_df.processed_img` holding the images and each
+row carrying the chunk `parent_image_id` shared by its four variants. `class`
+origins keep all chunks; `no_class` keeps only the first (see
+[`no_class_chunk_indices`](@ref)). `skipped_df` records origins dropped for
+having too few valid trials.
+
+# Behavior
+Errors if nothing could be materialised.
 """
 function materialize_augmented_samples(labels::DataFrame, ctx; target_trials::Int = TARGET_TRIALS)
     rows = NamedTuple[]
@@ -322,7 +400,7 @@ function materialize_augmented_samples(labels::DataFrame, ctx; target_trials::In
 end
 
 # --------------------------------------------------------------------------- #
-# Trial slices for scoring (unlabelled data uses the same slicing as training)
+# Trial slices for scoring (unlabeled data uses the same slicing as training)
 # --------------------------------------------------------------------------- #
 """
     scoring_slices(origin, sort_col, dataset_key, channel_name, sort_variable; target_trials=TARGET_TRIALS)

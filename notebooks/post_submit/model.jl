@@ -8,13 +8,20 @@
 # by a 2-way (no_class / class) Dense layer. See
 # https://fluxml.ai/Metalhead.jl/stable/api/resnet/
 
+"Stack ERP images (a vector, or `sample_df.processed_img`) into a `(H, W, 1, N)` tensor."
 images_to_tensor(imgs) = CNNUtils.images_to_tensor(imgs)
 images_to_tensor(sample_df::DataFrame) = CNNUtils.images_to_tensor(sample_df.processed_img)
 
 """
-    setup_pipeline_device() -> (device::Function, use_cuda::Bool, batchsize::Int)
+    setup_pipeline_device() -> (device, use_cuda, batchsize)
 
-Resolve the compute device once and pick the matching training batch size.
+Resolve the compute device once.
+
+# Returns
+- `device::Function`: `gpu` or `cpu` mover.
+- `use_cuda::Bool`: whether a CUDA device is in use.
+- `batchsize::Int`: matching training batch size ([`TRAIN_BATCHSIZE_GPU`](@ref) /
+  `TRAIN_BATCHSIZE_CPU`, the thesis values).
 """
 function setup_pipeline_device()
     device, use_cuda = Generalization.setup_device()
@@ -34,9 +41,21 @@ build_pretrained_resnet18() = Generalization.build_resnet_single_channel_pretrai
     train_resnet18!(model, X, y; model_name, nepochs, lr, batchsize, device,
                     label_smoothing=LABEL_SMOOTHING) -> (model, history_df, train_time_s)
 
-Train `model` in place with Adam + logit cross-entropy. Mirrors the Week-20
-engine's loop but additionally softens the one-hot targets with
-`label_smoothing` (thesis: 0.02), which the engine's loss does not do.
+Train `model` in place with Adam and logit cross-entropy.
+
+# Arguments
+- `model`: a model from [`build_pretrained_resnet18`](@ref), already on `device`.
+- `X::Array{Float32, 4}`: `(H, W, 1, N)` image tensor.
+- `y::Vector{Int}`: binary labels (0 = no_class, 1 = class).
+- `model_name::String`: label used in the per-epoch log lines.
+- `nepochs`, `lr`, `batchsize`: training schedule.
+- `device::Function`: `gpu`/`cpu` mover.
+- `label_smoothing::Float32=LABEL_SMOOTHING`: softens the one-hot targets
+  (thesis: 0.02); the Week-20 engine's loss does not do this.
+
+# Returns
+`(model, history_df, train_time_s)` where `history_df` has one row per epoch with
+`avg_loss`. The RNG is seeded from `time_ns()` each call (not reproducible).
 """
 function train_resnet18!(model, X::Array{Float32, 4}, y::Vector{Int};
         model_name::String, nepochs::Int, lr::Float32, batchsize::Int, device::Function,
@@ -71,9 +90,13 @@ function train_resnet18!(model, X::Array{Float32, 4}, y::Vector{Int};
 end
 
 """
-    predict_probs(model, X; device, batchsize) -> (logits, probs)
+    predict_probs(model, X; device, batchsize=PREDICT_BATCHSIZE) -> (logits, probs)
 
-`probs[1, :]` is P(no_class), `probs[2, :]` is P(class).
+Run `model` over the image tensor `X` in batches.
+
+# Returns
+- `logits::Matrix`, `probs::Matrix`, both `2 × N`. Row 1 is `no_class`, row 2 is
+  `class`, so `probs[2, :]` is P(class).
 """
 function predict_probs(model, X::Array{Float32, 4}; device::Function,
         batchsize::Int = Generalization.PREDICT_BATCHSIZE)
@@ -81,7 +104,13 @@ function predict_probs(model, X::Array{Float32, 4}; device::Function,
 end
 
 """
-    binary_metrics(model, X, y, idxs; device, batchsize) -> (metrics, logits, probs, y_true, y_pred)
+    binary_metrics(model, X, y, idxs; device, batchsize=PREDICT_BATCHSIZE)
+        -> (metrics, logits, probs, y_true, y_pred)
+
+Score the columns `idxs` of `X` and compare to `y`. Predicts `class` when
+P(class) ≥ P(no_class). Returns the classification `metrics` (accuracy, balanced
+accuracy, macro-F1, precision, recall) plus the raw `logits`/`probs` and the
+true/predicted label vectors for that subset.
 """
 function binary_metrics(model, X::Array{Float32, 4}, y::Vector{Int}, idxs::Vector{Int};
         device::Function, batchsize::Int = Generalization.PREDICT_BATCHSIZE)
@@ -91,4 +120,16 @@ function binary_metrics(model, X::Array{Float32, 4}, y::Vector{Int}, idxs::Vecto
     y_pred = [probs[2, i] >= probs[1, i] ? 1 : 0 for i in axes(probs, 2)]
     metrics = CNNUtils.compute_metrics(y_pred, y_true)
     return metrics, logits, probs, y_true, y_pred
+end
+
+"""
+    save_final_model(path, model) -> path
+
+Save the model's full CPU `Flux.state` (weights + BatchNorm running stats, which
+matter for ResNet18). Reload later via `build_pretrained_resnet18()` +
+`Flux.loadmodel!`.
+"""
+function save_final_model(path::AbstractString, model)
+    JLD2.jldsave(path; model_state = Flux.state(cpu(model)))
+    return path
 end

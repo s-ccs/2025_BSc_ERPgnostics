@@ -19,10 +19,19 @@ ENV["JULIA_PKG_PRECOMPILE_AUTO"] = "0"
 ENV["JULIA_NUM_PRECOMPILE_TASKS"] = "1"
 
 """
-    find_repo_root(start_dir) -> String
+    find_repo_root(start_dir=@__DIR__) -> String
 
-Walk up from `start_dir`/`pwd()` until a directory containing both `notebooks`
-and `datasets` is found.
+Locate the repository root.
+
+# Arguments
+- `start_dir::AbstractString`: directory to start the upward search from.
+
+# Returns
+- `String`: the first ancestor of `start_dir`/`pwd()` that contains both a
+  `notebooks` and a `datasets` directory.
+
+# Behavior
+Throws an error if no such directory is found.
 """
 function find_repo_root(start_dir::AbstractString = @__DIR__)
     candidates = unique(normpath.([
@@ -91,11 +100,12 @@ const CNNUtils = Generalization.ERPCNNExperimentUtils
 # Paths
 # --------------------------------------------------------------------------- #
 const DATASETS_ROOT = joinpath(REPO_ROOT, "datasets")
-const OUTPUT_DIR = joinpath(POST_SUBMIT_DIR, "outputs")
 
-# Final lean output CSVs (overwritten on every run).
+# The only outputs of a run (all overwritten each time): the two lean score CSVs
+# and the final model trained on all labeled data.
 const LEAN_AUGMENTATION_SCORES_PATH = joinpath(POST_SUBMIT_DIR, "lean_augmentation_scores.csv")
 const LEAN_PARENT_SCORES_PATH = joinpath(POST_SUBMIT_DIR, "lean_parent_scores.csv")
+const FINAL_MODEL_PATH = joinpath(POST_SUBMIT_DIR, "final_model.jld2")
 
 const MODEL_NAME = "resnet18_post_submit_inverse_sort_polarity_binary"
 
@@ -110,8 +120,11 @@ const NO_CLASS_CHUNKS_PER_ORIGIN = parse(Int, get(ENV, "POST_SUBMIT_NO_CLASS_CHU
 
 # Training batch size and label smoothing follow the thesis (batch size 64,
 # label smoothing 0.02), overriding the Week-20 engine defaults (32 / none).
+"Training batch size on a CUDA device (thesis value 64)."
 const TRAIN_BATCHSIZE_GPU = parse(Int, get(ENV, "POST_SUBMIT_BATCHSIZE_GPU", "64"))
+"Training batch size on CPU."
 const TRAIN_BATCHSIZE_CPU = parse(Int, get(ENV, "POST_SUBMIT_BATCHSIZE_CPU", "8"))
+"Label-smoothing strength applied to the one-hot targets (thesis value 0.02)."
 const LABEL_SMOOTHING = parse(Float32, get(ENV, "POST_SUBMIT_LABEL_SMOOTHING", "0.02"))
 
 # Image-pipeline constants, taken straight from the Week-20 engine so training,
@@ -132,8 +145,11 @@ const CLASS_ID = Dict(
     "tilted_bar" => 6,
 )
 
-# The four sort/polarity augmentations applied identically to every ERP image,
-# in training, CV, final scoring and unlabeled scoring.
+"""
+The four sort/polarity augmentation variants applied identically to every ERP
+image in training, CV and scoring. Each is a `NamedTuple` `(name, label,
+inverse_sort, inverse_polarity)`.
+"""
 const AUGMENTATION_VARIANTS = [
     (name = "reference", label = "normal sort, normal polarity", inverse_sort = false, inverse_polarity = false),
     (name = "inverse_sort", label = "inverse sort, normal polarity", inverse_sort = true, inverse_polarity = false),
@@ -141,8 +157,10 @@ const AUGMENTATION_VARIANTS = [
     (name = "inverse_sort_inverse_polarity", label = "inverse sort, inverse polarity", inverse_sort = true, inverse_polarity = true),
 ]
 
-# Dataset-specific sort variables that should be scored even when they were not
-# manually labelled in Label Studio.
+"""
+Dataset-specific sort variables that should be scored even when they were not
+manually labeled. Maps `dataset_key => Vector{sort_variable}`.
+"""
 const EXTRA_SORT_VARIABLES_BY_DATASET = Dict(
     "fixations_dataset" => [
         "duration",
@@ -165,7 +183,6 @@ const EXTRA_SORT_VARIABLES_BY_DATASET = Dict(
 # Suffix used for the parent id of a whole-parent (all-trials) ERP image.
 const FULL_PARENT_TAG = "full_parent"
 
-mkpath(OUTPUT_DIR)
 
 # --------------------------------------------------------------------------- #
 # Logging
@@ -181,12 +198,13 @@ function log_step(msg...)
     return nothing
 end
 
+"Convert any cell value to a `String`, mapping `missing`/`nothing` to `\"\"`."
 cellstr(x) = (ismissing(x) || x === nothing) ? "" : string(x)
 
+"Log the key configuration constants at the start of a run."
 function print_config_banner()
     log_step("REPO_ROOT          = ", REPO_ROOT)
     log_step("DATASETS_ROOT      = ", DATASETS_ROOT)
-    log_step("OUTPUT_DIR         = ", OUTPUT_DIR)
     log_step("MODEL_NAME         = ", MODEL_NAME)
     log_step("K_FOLDS            = ", K_FOLDS)
     log_step("TARGET_TRIALS      = ", TARGET_TRIALS)
