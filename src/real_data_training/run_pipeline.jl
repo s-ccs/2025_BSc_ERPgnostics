@@ -1,9 +1,9 @@
 # run_pipeline.jl
 #
-# Entry point for the post-submit ResNet18 ERP-scoring pipeline. Every run
+# Entry point for the real-data ResNet18 ERP-scoring pipeline. Every run
 # recomputes everything from scratch and overwrites the output CSVs.
 #
-#   julia notebooks/post_submit/run_pipeline.jl
+#   julia src/real_data_training/run_pipeline.jl
 #
 # Steps:
 #   1. load labels and materialise the 4-augmentation labeled samples
@@ -12,18 +12,19 @@
 #   4. score the unlabeled combinations with the final model
 #   5. write the lean per-combination and per-augmentation CSVs
 #
-# Env overrides: POST_SUBMIT_EPOCHS, POST_SUBMIT_LR, POST_SUBMIT_FOLDS,
-# POST_SUBMIT_TARGET_TRIALS, POST_SUBMIT_BATCHSIZE_GPU, POST_SUBMIT_LABEL_SMOOTHING.
+# Env overrides: REAL_DATA_TRAINING_EPOCHS, REAL_DATA_TRAINING_LR,
+# REAL_DATA_TRAINING_FOLDS, REAL_DATA_TRAINING_TARGET_TRIALS,
+# REAL_DATA_TRAINING_BATCHSIZE_GPU, REAL_DATA_TRAINING_LABEL_SMOOTHING.
 
-const _PS_DIR = @__DIR__
-include(joinpath(_PS_DIR, "config.jl"))
-include(joinpath(_PS_DIR, "data_loading.jl"))
-include(joinpath(_PS_DIR, "augmentation.jl"))
-include(joinpath(_PS_DIR, "model.jl"))
-include(joinpath(_PS_DIR, "train_cv.jl"))
-include(joinpath(_PS_DIR, "train_final.jl"))
-include(joinpath(_PS_DIR, "predict_unlabeled.jl"))
-include(joinpath(_PS_DIR, "aggregate_scores.jl"))
+const _REAL_DATA_TRAINING_DIR = @__DIR__
+include(joinpath(_REAL_DATA_TRAINING_DIR, "config.jl"))
+include(joinpath(_REAL_DATA_TRAINING_DIR, "data_loading.jl"))
+include(joinpath(_REAL_DATA_TRAINING_DIR, "augmentation.jl"))
+include(joinpath(_REAL_DATA_TRAINING_DIR, "model.jl"))
+include(joinpath(_REAL_DATA_TRAINING_DIR, "train_cv.jl"))
+include(joinpath(_REAL_DATA_TRAINING_DIR, "train_final.jl"))
+include(joinpath(_REAL_DATA_TRAINING_DIR, "predict_unlabeled.jl"))
+include(joinpath(_REAL_DATA_TRAINING_DIR, "aggregate_scores.jl"))
 
 """
     labeled_combo_set(labels) -> Set{NTuple{3, String}}

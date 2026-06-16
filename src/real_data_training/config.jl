@@ -1,6 +1,6 @@
 # config.jl
 #
-# Central configuration for the lean post-submit ResNet18 ERP-scoring pipeline.
+# Central configuration for the lean real-data ResNet18 ERP-scoring pipeline.
 #
 # This file:
 #   * locates the repository root,
@@ -53,7 +53,7 @@ function find_repo_root(start_dir::AbstractString = @__DIR__)
 end
 
 const REPO_ROOT = find_repo_root()
-const POST_SUBMIT_DIR = joinpath(REPO_ROOT, "notebooks", "post_submit")
+const REAL_DATA_TRAINING_DIR = @__DIR__
 const MODEL_ENV_DIR = joinpath(REPO_ROOT, "notebooks", "model_test")
 
 Pkg.activate(MODEL_ENV_DIR; io = devnull)
@@ -102,30 +102,33 @@ const CNNUtils = Generalization.ERPCNNExperimentUtils
 const DATASETS_ROOT = joinpath(REPO_ROOT, "datasets")
 
 # The only outputs of a run (all overwritten each time): the two lean score CSVs
-# and the final model trained on all labeled data.
-const LEAN_AUGMENTATION_SCORES_PATH = joinpath(POST_SUBMIT_DIR, "lean_augmentation_scores.csv")
-const LEAN_PARENT_SCORES_PATH = joinpath(POST_SUBMIT_DIR, "lean_parent_scores.csv")
-const FINAL_MODEL_PATH = joinpath(POST_SUBMIT_DIR, "final_model.jld2")
+# and the final model trained on all labeled data. They live next to these
+# scripts so moving this folder keeps code and outputs together.
+const LEAN_AUGMENTATION_SCORES_PATH = joinpath(REAL_DATA_TRAINING_DIR, "lean_augmentation_scores.csv")
+const LEAN_PARENT_SCORES_PATH = joinpath(REAL_DATA_TRAINING_DIR, "lean_parent_scores.csv")
+const FINAL_MODEL_PATH = joinpath(REAL_DATA_TRAINING_DIR, "final_model.jld2")
 
-const MODEL_NAME = "resnet18_post_submit_inverse_sort_polarity_binary"
+const MODEL_NAME = "resnet18_real_data_training_inverse_sort_polarity_binary"
 
 # --------------------------------------------------------------------------- #
 # Hyper-parameters (overridable via environment variables)
 # --------------------------------------------------------------------------- #
-const K_FOLDS = parse(Int, get(ENV, "POST_SUBMIT_FOLDS", "5"))
-const TRAIN_EPOCHS = parse(Int, get(ENV, "POST_SUBMIT_EPOCHS", string(Generalization.TRAIN_EPOCHS)))
-const TRAIN_LR = parse(Float32, get(ENV, "POST_SUBMIT_LR", string(Generalization.TRAIN_LR)))
-const TARGET_TRIALS = parse(Int, get(ENV, "POST_SUBMIT_TARGET_TRIALS", "200"))
-const NO_CLASS_CHUNKS_PER_ORIGIN = parse(Int, get(ENV, "POST_SUBMIT_NO_CLASS_CHUNKS_PER_ORIGIN", "1"))
+env_config(name::AbstractString, default::AbstractString) = get(ENV, name, default)
+
+const K_FOLDS = parse(Int, env_config("REAL_DATA_TRAINING_FOLDS", "5"))
+const TRAIN_EPOCHS = parse(Int, env_config("REAL_DATA_TRAINING_EPOCHS", string(Generalization.TRAIN_EPOCHS)))
+const TRAIN_LR = parse(Float32, env_config("REAL_DATA_TRAINING_LR", string(Generalization.TRAIN_LR)))
+const TARGET_TRIALS = parse(Int, env_config("REAL_DATA_TRAINING_TARGET_TRIALS", "200"))
+const NO_CLASS_CHUNKS_PER_ORIGIN = parse(Int, env_config("REAL_DATA_TRAINING_NO_CLASS_CHUNKS_PER_ORIGIN", "1"))
 
 # Training batch size and label smoothing follow the thesis (batch size 64,
 # label smoothing 0.02), overriding the Week-20 engine defaults (32 / none).
 "Training batch size on a CUDA device (thesis value 64)."
-const TRAIN_BATCHSIZE_GPU = parse(Int, get(ENV, "POST_SUBMIT_BATCHSIZE_GPU", "64"))
+const TRAIN_BATCHSIZE_GPU = parse(Int, env_config("REAL_DATA_TRAINING_BATCHSIZE_GPU", "64"))
 "Training batch size on CPU."
-const TRAIN_BATCHSIZE_CPU = parse(Int, get(ENV, "POST_SUBMIT_BATCHSIZE_CPU", "8"))
+const TRAIN_BATCHSIZE_CPU = parse(Int, env_config("REAL_DATA_TRAINING_BATCHSIZE_CPU", "8"))
 "Label-smoothing strength applied to the one-hot targets (thesis value 0.02)."
-const LABEL_SMOOTHING = parse(Float32, get(ENV, "POST_SUBMIT_LABEL_SMOOTHING", "0.02"))
+const LABEL_SMOOTHING = parse(Float32, env_config("REAL_DATA_TRAINING_LABEL_SMOOTHING", "0.02"))
 
 # Image-pipeline constants, taken straight from the Week-20 engine so training,
 # CV, final scoring and unlabeled scoring all use identical preprocessing.
@@ -204,6 +207,7 @@ cellstr(x) = (ismissing(x) || x === nothing) ? "" : string(x)
 "Log the key configuration constants at the start of a run."
 function print_config_banner()
     log_step("REPO_ROOT          = ", REPO_ROOT)
+    log_step("OUTPUT_DIR         = ", REAL_DATA_TRAINING_DIR)
     log_step("DATASETS_ROOT      = ", DATASETS_ROOT)
     log_step("MODEL_NAME         = ", MODEL_NAME)
     log_step("K_FOLDS            = ", K_FOLDS)

@@ -130,6 +130,7 @@ matter for ResNet18). Reload later via `build_pretrained_resnet18()` +
 `Flux.loadmodel!`.
 """
 function save_final_model(path::AbstractString, model)
+    mkpath(dirname(path))
     JLD2.jldsave(path; model_state = Flux.state(cpu(model)))
     return path
 end

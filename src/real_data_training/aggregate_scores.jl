@@ -169,6 +169,8 @@ Write the per-combination and per-augmentation CSVs (overwriting any existing
 files) and return their paths as `(parent, augmentation)`.
 """
 function write_lean_outputs(lean_aug::DataFrame, combo_df::DataFrame)
+    mkpath(dirname(LEAN_PARENT_SCORES_PATH))
+    mkpath(dirname(LEAN_AUGMENTATION_SCORES_PATH))
     CSV.write(LEAN_PARENT_SCORES_PATH, combo_df)
     CSV.write(LEAN_AUGMENTATION_SCORES_PATH, lean_aug)
     return (parent = LEAN_PARENT_SCORES_PATH, augmentation = LEAN_AUGMENTATION_SCORES_PATH)

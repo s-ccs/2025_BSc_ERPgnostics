@@ -1,11 +1,11 @@
-# Post-submit ResNet18 ERP scoring
+# Real-data ResNet18 ERP training
 
 Scores ERP images with a pretrained ResNet18 and writes CSV and model as outputs.
 
 ## Run
 
 ```bash
-julia notebooks/post_submit/run_pipeline.jl
+julia src/real_data_training/run_pipeline.jl
 ```
 
 Every run recomputes everything and overwrites the output files in this folder.
@@ -40,7 +40,7 @@ fallback for combinations with fewer than 200 valid trials.
 ## Explorer
 
 ```bash
-julia --project=notebooks/model_test notebooks/post_submit/erpgnostics_topoplot_explorer.jl
+julia --project=notebooks/model_test src/real_data_training/erpgnostics_topoplot_explorer.jl
 ```
 
 ## Key Scripts

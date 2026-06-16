@@ -1,6 +1,6 @@
 # data_loading.jl
 #
-# Dataset discovery and loading for the post-submit pipeline. Reads the built
+# Dataset discovery and loading for the real-data training pipeline. Reads the built
 # JLD2 datasets under `datasets/<dataset>/`:
 #   * events.jld2   -> per-trial event table + metadata
 #   * labels.jld2   -> manual ERP-pattern labels (channel x sort_variable)

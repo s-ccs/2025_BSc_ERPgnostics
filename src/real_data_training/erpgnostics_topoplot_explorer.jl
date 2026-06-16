@@ -1,16 +1,16 @@
-# Native GLMakie ERPgnostics-style explorer for the post-submit lean scores.
+# Native GLMakie ERPgnostics-style explorer for the real-data training scores.
 #
 # Run from the repository root:
 #
-#     julia --project=notebooks/model_test notebooks/post_submit/erpgnostics_topoplot_explorer.jl
+#     julia --project=notebooks/model_test src/real_data_training/erpgnostics_topoplot_explorer.jl
 #
 # Optional environment variables:
-#     POST_SUBMIT_PARENT_SCORES   CSV path, defaults to notebooks/post_submit/lean_parent_scores.csv
-#     POST_SUBMIT_DATASETS_ROOT   dataset root, defaults to datasets/
-#     POST_SUBMIT_START_DATASET   initial dataset key
-#     POST_SUBMIT_START_SORT      initial sorting variable
-#     POST_SUBMIT_START_CHANNEL   initial channel name
-#     POST_SUBMIT_EXPLORER_SMOKE  true/false, load one detail without opening a window
+#     REAL_DATA_TRAINING_PARENT_SCORES   CSV path, defaults to src/real_data_training/lean_parent_scores.csv
+#     REAL_DATA_TRAINING_DATASETS_ROOT   dataset root, defaults to datasets/
+#     REAL_DATA_TRAINING_START_DATASET   initial dataset key
+#     REAL_DATA_TRAINING_START_SORT      initial sorting variable
+#     REAL_DATA_TRAINING_START_CHANNEL   initial channel name
+#     REAL_DATA_TRAINING_EXPLORER_SMOKE  true/false, load one detail without opening a window
 
 import Pkg
 
@@ -36,7 +36,7 @@ function find_repo_root(start_dir::AbstractString = @__DIR__)
 end
 
 const REPO_ROOT = find_repo_root()
-const POST_SUBMIT_DIR = joinpath(REPO_ROOT, "notebooks", "post_submit")
+const REAL_DATA_TRAINING_DIR = @__DIR__
 const MODEL_ENV_DIR = joinpath(REPO_ROOT, "notebooks", "model_test")
 
 Pkg.activate(MODEL_ENV_DIR; io = devnull)
@@ -51,11 +51,13 @@ using GLMakie
 
 GLMakie.activate!()
 
-const DATASETS_ROOT = get(ENV, "POST_SUBMIT_DATASETS_ROOT", joinpath(REPO_ROOT, "datasets"))
+env_config(name::AbstractString, default::AbstractString) = get(ENV, name, default)
+
+const DATASETS_ROOT = env_config("REAL_DATA_TRAINING_DATASETS_ROOT", joinpath(REPO_ROOT, "datasets"))
 const DEFAULT_PARENT_SCORES_PATH = get(
     ENV,
-    "POST_SUBMIT_PARENT_SCORES",
-    joinpath(POST_SUBMIT_DIR, "lean_parent_scores.csv"),
+    "REAL_DATA_TRAINING_PARENT_SCORES",
+    joinpath(REAL_DATA_TRAINING_DIR, "lean_parent_scores.csv"),
 )
 
 const REFERENCE_DATASET_KEY = "fixations_dataset"
@@ -234,7 +236,7 @@ end
 function initial_dataset_key(score_df::DataFrame)
     keys = score_dataset_keys(score_df)
     isempty(keys) && error("Score CSV does not contain any datasets.")
-    preferred = get(ENV, "POST_SUBMIT_START_DATASET", "")
+    preferred = env_config("REAL_DATA_TRAINING_START_DATASET", "")
     !isempty(preferred) && return first_valid_or(preferred, keys)
     REFERENCE_DATASET_KEY in keys && return REFERENCE_DATASET_KEY
     return first(keys)
@@ -243,7 +245,7 @@ end
 function initial_sort_variable(score_df::DataFrame, dataset_key::AbstractString)
     vars = score_sort_variables(score_df, dataset_key)
     isempty(vars) && error("No scored sort variables for $(dataset_key).")
-    preferred = get(ENV, "POST_SUBMIT_START_SORT", "")
+    preferred = env_config("REAL_DATA_TRAINING_START_SORT", "")
     !isempty(preferred) && return first_valid_or(preferred, vars)
     for candidate in ("duration", "fixation_duration", "fixation_duration_ms", "latency", "epoch_index")
         candidate in vars && return candidate
@@ -254,7 +256,7 @@ end
 function initial_channel_name(score_df::DataFrame, dataset_key::AbstractString, sort_variable::AbstractString)
     channels = scored_channel_names(score_df, dataset_key, sort_variable)
     isempty(channels) && error("No scored channels for $(dataset_key), $(sort_variable).")
-    preferred = get(ENV, "POST_SUBMIT_START_CHANNEL", "")
+    preferred = env_config("REAL_DATA_TRAINING_START_CHANNEL", "")
     !isempty(preferred) && return first_valid_or(preferred, channels)
 
     sub = score_df[
@@ -707,11 +709,11 @@ function option_at(options, idx)
     return options[clamp(Int(idx), 1, length(options))]
 end
 
-function post_submit_erpgnostics_explorer(;
+function real_data_training_erpgnostics_explorer(;
         score_path::AbstractString = DEFAULT_PARENT_SCORES_PATH,
-        start_dataset_key::AbstractString = get(ENV, "POST_SUBMIT_START_DATASET", ""),
-        start_sort_variable::AbstractString = get(ENV, "POST_SUBMIT_START_SORT", ""),
-        start_channel::AbstractString = get(ENV, "POST_SUBMIT_START_CHANNEL", ""))
+        start_dataset_key::AbstractString = env_config("REAL_DATA_TRAINING_START_DATASET", ""),
+        start_sort_variable::AbstractString = env_config("REAL_DATA_TRAINING_START_SORT", ""),
+        start_channel::AbstractString = env_config("REAL_DATA_TRAINING_START_CHANNEL", ""))
 
     score_df = load_parent_scores(score_path)
     dataset_keys = score_dataset_keys(score_df)
@@ -980,12 +982,12 @@ function smoke_test()
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
-    if lowercase(get(ENV, "POST_SUBMIT_EXPLORER_SMOKE", "false")) in ("true", "1", "yes")
+    if lowercase(env_config("REAL_DATA_TRAINING_EXPLORER_SMOKE", "false")) in ("true", "1", "yes")
         smoke_test()
     else
-        app = post_submit_erpgnostics_explorer()
+        app = real_data_training_erpgnostics_explorer()
         screen = display(app.figure)
-        println("Post-submit ERPgnostics explorer is running.")
+        println("Real-data ERPgnostics explorer is running.")
         println("Score file: ", DEFAULT_PARENT_SCORES_PATH)
         println("Datasets root: ", DATASETS_ROOT)
         println("Close the GLMakie window to exit.")
