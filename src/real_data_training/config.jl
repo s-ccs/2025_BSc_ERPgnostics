@@ -4,9 +4,10 @@
 #
 # This file:
 #   * locates the repository root,
-#   * activates the shared `notebooks/model_test` package environment,
-#   * loads the Week-20 ResNet/Metalhead engine module (the actual pretrained
-#     ResNet18 + training/prediction + Gaussian-reference image pipeline),
+#   * activates this folder's own package environment (`Project.toml` /
+#     `Manifest.toml`), so the pipeline is self-contained,
+#   * loads the vendored model engine (`model_engine.jl`): the pretrained
+#     ResNet18 + prediction + Gaussian-reference image pipeline,
 #   * defines all constants (class ids, augmentation variants, seeds, paths).
 #
 # It is meant to be `include`d once before the other modules. All pipeline
@@ -28,7 +29,7 @@ Locate the repository root.
 
 # Returns
 - `String`: the first ancestor of `start_dir`/`pwd()` that contains both a
-  `notebooks` and a `datasets` directory.
+  `datasets` and a `src` directory.
 
 # Behavior
 Throws an error if no such directory is found.
@@ -43,9 +44,9 @@ function find_repo_root(start_dir::AbstractString = @__DIR__)
         joinpath(pwd(), ".."),
         joinpath(pwd(), "..", ".."),
     ]))
-    # The repo root is the first candidate holding both notebooks/ and datasets/.
+    # The repo root is the first candidate holding both datasets/ and src/.
     for candidate in candidates
-        if isdir(joinpath(candidate, "notebooks")) && isdir(joinpath(candidate, "datasets"))
+        if isdir(joinpath(candidate, "datasets")) && isdir(joinpath(candidate, "src"))
             return candidate
         end
     end
@@ -54,9 +55,8 @@ end
 
 const REPO_ROOT = find_repo_root()
 const REAL_DATA_TRAINING_DIR = @__DIR__
-const MODEL_ENV_DIR = joinpath(REPO_ROOT, "notebooks", "model_test")
 
-Pkg.activate(MODEL_ENV_DIR; io = devnull)
+Pkg.activate(REAL_DATA_TRAINING_DIR; io = devnull)
 
 using CSV
 using CUDA
@@ -71,29 +71,18 @@ using Printf: @sprintf
 using Random
 using Statistics
 
-"""
-    quiet_include(path)
-
-`include` a file while suppressing its stdout/stderr (the Week-20 engine prints
-a lot during load).
-"""
-function quiet_include(path::AbstractString)
-    redirect_stdout(devnull) do
-        redirect_stderr(devnull) do
-            include(path)
-        end
-    end
+# Load the self-contained model engine (`model_engine.jl`): a trimmed, vendored
+# copy of the parts of the former Week-20 engine that this pipeline uses --
+# the pretrained Metalhead ResNet18 builder, the device/prediction helpers and
+# the Gaussian-reference image pipeline. It depends only on this folder's own
+# environment, not on `notebooks/`.
+if !isdefined(Main, :RealDataModelEngine)
+    include(joinpath(REAL_DATA_TRAINING_DIR, "model_engine.jl"))
 end
 
-# Load the Week-20 engine that provides the pretrained Metalhead ResNet18,
-# the training/prediction helpers and the Gaussian-reference image pipeline.
-if !isdefined(Main, :Week20ResNetFixationGeneralization)
-    quiet_include(joinpath(REPO_ROOT, "notebooks", "week_20", "resnet_fixation_generalization_experiment.jl"))
-end
+using .RealDataModelEngine
 
-using .Week20ResNetFixationGeneralization
-
-const Generalization = Week20ResNetFixationGeneralization
+const Generalization = RealDataModelEngine
 const CNNUtils = Generalization.ERPCNNExperimentUtils
 
 # --------------------------------------------------------------------------- #

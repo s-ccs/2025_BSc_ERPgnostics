@@ -2,7 +2,7 @@
 #
 # Run from the repository root:
 #
-#     julia --project=notebooks/model_test src/real_data_training/erpgnostics_topoplot_explorer.jl
+#     julia --project=src/real_data_training src/real_data_training/erpgnostics_topoplot_explorer.jl
 #
 # Optional environment variables:
 #     REAL_DATA_TRAINING_PARENT_SCORES   CSV path, defaults to src/real_data_training/lean_parent_scores.csv
@@ -28,7 +28,7 @@ function find_repo_root(start_dir::AbstractString = @__DIR__)
         joinpath(pwd(), "..", ".."),
     ]))
     for candidate in candidates
-        if isdir(joinpath(candidate, "notebooks")) && isdir(joinpath(candidate, "datasets"))
+        if isdir(joinpath(candidate, "datasets")) && isdir(joinpath(candidate, "src"))
             return candidate
         end
     end
@@ -37,9 +37,8 @@ end
 
 const REPO_ROOT = find_repo_root()
 const REAL_DATA_TRAINING_DIR = @__DIR__
-const MODEL_ENV_DIR = joinpath(REPO_ROOT, "notebooks", "model_test")
 
-Pkg.activate(MODEL_ENV_DIR; io = devnull)
+Pkg.activate(REAL_DATA_TRAINING_DIR; io = devnull)
 
 using CSV
 using DataFrames
@@ -61,13 +60,10 @@ const DEFAULT_PARENT_SCORES_PATH = get(
 )
 
 const REFERENCE_DATASET_KEY = "fixations_dataset"
-const REFERENCE_POSITIONS_PATH = joinpath(
-    REPO_ROOT,
-    "notebooks",
-    "model_test",
-    "real_data_sets",
-    REFERENCE_DATASET_KEY,
-    "positions_128.jld2",
+# Load the channel positions from their original location instead of a local copy.
+const REFERENCE_POSITIONS_PATH = env_config(
+    "REAL_DATA_TRAINING_REFERENCE_POSITIONS",
+    joinpath(REPO_ROOT, "notebooks", "model_test", "real_data_sets", REFERENCE_DATASET_KEY, "positions_128.jld2"),
 )
 const DETAIL_LOWPASS_SIGMA = 75.0f0
 const DETAIL_LOWPASS_KERNEL_SIZE = (21, 21)

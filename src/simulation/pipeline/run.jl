@@ -17,9 +17,8 @@ gpu_available() = isdefined(@__MODULE__, :CUDA) && CUDA.functional()
     configure_device!(use_gpu::Bool)
 
 Prepare and announce the compute device. On GPU this disables scalar indexing
-and selects CUDA device 0, mirroring the setup in `src/real_data_training`. Only
-the ResNet18 training and inference run on the GPU; the ERPGen simulator always
-runs on the CPU.
+and selects CUDA device 0. Only the ResNet18 training and inference run on the
+GPU; the ERPGen simulator always runs on the CPU.
 
 # Arguments
 - `use_gpu::Bool`: whether the run should use a CUDA device.

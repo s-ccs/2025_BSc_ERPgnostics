@@ -55,8 +55,8 @@ julia -t auto --project=src/simulation src/simulation/run_search.jl
 the environment is instantiated.
 
 **Devices and threads.** When a CUDA device is functional it is used for the
-ResNet18 training and inference (with `allowscalar(false)` and device 0,
-mirroring `src/real_data_training`); otherwise the run falls back to CPU. The
+ResNet18 training and inference (with `allowscalar(false)` and device 0);
+otherwise the run falls back to CPU. The
 ERPGen simulator always runs on the CPU and parallelises the per-image
 simulation across `Threads.nthreads()` — start Julia with `-t auto` to use all
 CPU cores. BLAS is pinned to a single thread so it does not oversubscribe the

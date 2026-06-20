@@ -40,7 +40,7 @@ fallback for combinations with fewer than 200 valid trials.
 ## Explorer
 
 ```bash
-julia --project=notebooks/model_test src/real_data_training/erpgnostics_topoplot_explorer.jl
+julia --project=src/real_data_training src/real_data_training/erpgnostics_topoplot_explorer.jl
 ```
 
 ## Key Scripts

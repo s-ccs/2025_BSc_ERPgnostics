@@ -1,14 +1,15 @@
 # %%
 import Pkg
 
-# Activate the lightweight script environment and load the reusable helpers.
+# Activate this example's lightweight environment and load the reusable helpers
+# that live in `scripts/erp_pipeline/`.
 const REPO_ROOT = normpath(joinpath(@__DIR__, "..", ".."))
-Pkg.activate(joinpath(REPO_ROOT, "scripts"))
+Pkg.activate(@__DIR__)
 
-include(joinpath(REPO_ROOT, "src", "erp_pipeline", "erp_data.jl"))
-include(joinpath(REPO_ROOT, "src", "erp_pipeline", "erp_processing.jl"))
-include(joinpath(REPO_ROOT, "src", "erp_pipeline", "erp_augmentation.jl"))
-include(joinpath(REPO_ROOT, "src", "erp_pipeline", "erp_plot.jl"))
+include(joinpath(REPO_ROOT, "scripts", "erp_pipeline", "erp_data.jl"))
+include(joinpath(REPO_ROOT, "scripts", "erp_pipeline", "erp_processing.jl"))
+include(joinpath(REPO_ROOT, "scripts", "erp_pipeline", "erp_augmentation.jl"))
+include(joinpath(REPO_ROOT, "scripts", "erp_pipeline", "erp_plot.jl"))
 
 # %%
 # Show which dataset bundles are available.
